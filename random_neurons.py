@@ -6,11 +6,11 @@ V = np.full(N, -70.0)
 I_syn = np.zeros(N)
 I_ext = np.random.uniform(1.4, 1.6, N)
 
-tau_m = 20
+tau_m = np.random.uniform(15, 25, N)
 tau_syn = 5
 R = 10
 V_rest = -70.0
-V_threshold = -55.0
+V_threshold = np.random.uniform(-57, -53, N)
 V_reset = -80.0
 dt = 0.1
 
@@ -18,13 +18,14 @@ W = np.random.rand(N, N) * 0.5
 mask = np.random.rand(N, N) > 0.95 # connectivity is 5%
 W = W * mask
 np.fill_diagonal(W, 0)
+refractory = np.zeros(N)
 
 n_inhibitory = 20
 W[80:, :] *= -1
 
 W_initial = W.copy()
 
-tau_stdp = 20  # ms
+tau_stdp = 40  # ms
 A_plus = 0.01  # strengthening rate
 A_minus = 0.01  # weakening rate
 last_spike = np.full(N, -np.inf)  # when each neuron last fired
@@ -33,8 +34,10 @@ last_spike = np.full(N, -np.inf)  # when each neuron last fired
 for step in range(2000):
     dV = (1 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn))
     V = V + dV * dt
-    spikes = V >= V_threshold
+    refractory -= dt
+    spikes = (V >= V_threshold) & (refractory <= 0)
     V[spikes] = V_reset
+    refractory[spikes] = 2.0
     for i in np.where(spikes)[0]:
         I_syn += W[i, :]
     I_syn -= (I_syn / tau_syn) * dt
@@ -47,8 +50,10 @@ for step in range(3000):
     dV = (1 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn))
     V = V + dV * dt
 
-    spikes = V >= V_threshold
+    refractory -= dt
+    spikes = (V >= V_threshold) & (refractory <= 0)
     V[spikes] = V_reset
+    refractory[spikes] = 2.0  # 2ms refractory period
 
     for i in np.where(spikes)[0]:
         I_syn += W[i, :]
