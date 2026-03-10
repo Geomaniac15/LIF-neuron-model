@@ -3,8 +3,14 @@ import matplotlib.pyplot as plt
 
 N = 100
 V = np.full(N, -70.0)
-I_syn = np.zeros(N)
+
 I_ext = np.random.uniform(1.4, 1.6, N)
+
+g_exc = np.zeros(N)
+g_inh = np.zeros(N)
+
+E_exc = 0.0 # excitatory reversal potental
+E_inh = -80.0 # inhibitory reversal potential
 
 tau_m = np.random.uniform(15, 25, N)
 tau_syn = 5
@@ -32,6 +38,7 @@ last_spike = np.full(N, -np.inf)  # when each neuron last fired
 
 # warmup
 for step in range(2000):
+    I_syn = g_exc * (V - E_exc) + g_inh * (V - E_inh)
     dV = (1 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn))
     V = V + dV * dt
     refractory -= dt
@@ -39,15 +46,21 @@ for step in range(2000):
     V[spikes] = V_reset
     refractory[spikes] = 2.0
     for i in np.where(spikes)[0]:
-        I_syn += W[i, :]
-    I_syn -= (I_syn / tau_syn) * dt
+        if i < 80:
+            g_exc += W[i, :]
+        else:
+            g_inh += W[i, :]
+
+    g_exc -= (g_exc / tau_syn) * dt
+    g_inh -= (g_inh / tau_syn) * dt
 
 spike_record = []
 
 print(W.round(2))
 
 for step in range(3000):
-    dV = (1 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn))
+    I_syn = g_exc * (V - E_exc) + g_inh * (V - E_inh)
+    dV = (1 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn))    
     V = V + dV * dt
 
     refractory -= dt
@@ -56,7 +69,11 @@ for step in range(3000):
     refractory[spikes] = 2.0  # 2ms refractory period
 
     for i in np.where(spikes)[0]:
-        I_syn += W[i, :]
+        if i < 80:
+            g_exc += W[i, :]
+        else:
+            g_inh += W[i, :]
+        
         spike_record.append((step * dt, i))
 
         last_spike[i] = step * dt
@@ -68,7 +85,8 @@ for step in range(3000):
 
         np.clip(W, -1.0, 1.0, out=W)
     
-    I_syn -= (I_syn / tau_syn) * dt
+    g_exc -= (g_exc / tau_syn) * dt
+    g_inh -= (g_inh / tau_syn) * dt
 
 print(W.round(2))
 
