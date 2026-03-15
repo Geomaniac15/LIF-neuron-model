@@ -24,16 +24,46 @@ state = patterns[0].astype(float).copy()
 noise_mask = np.random.rand(N) < 0.3
 state[noise_mask] *= -1
 
-for iteration in range(20):
-    new_state = hopfield_update(state, patterns)
-    if np.allclose(new_state, state, atol=1e-6):
-        print(f'converged at iteration {iteration}')
-        break
-    state = new_state
+n_trials = 100
 
-# check if it retrieved pattern 0
-# continuous state needs to be thresholded back to binary for comparison
-retrieved = np.sign(state)
-match = np.array_equal(retrieved, patterns[0])
-print(f'match: {match}')
-print(f'fraction correct: {np.mean(retrieved == patterns[0]):.2f}')
+# for n_patterns in [14, 50, 100, 200, 500, 1000, 2500, 5000, 7500, 10000, 12500, 15000]:
+#     patterns = np.array([np.random.choice([-1, 1], size=N) for _ in range(n_patterns)])
+    
+#     successes = 0
+#     for trial in range(n_trials):
+#         state = patterns[0].astype(float).copy()
+#         noise_mask = np.random.rand(N) < 0.3
+#         state[noise_mask] *= -1
+
+#         for iteration in range(20):
+#             new_state = hopfield_update(state, patterns)
+#             if np.allclose(new_state, state, atol=1e-6):
+#                 break
+#             state = new_state
+
+#         retrieved = np.sign(state)
+#         if np.array_equal(retrieved, patterns[0]):
+#             successes += 1
+
+#     print(f'{n_patterns} patterns: {successes}/{n_trials} correct')
+
+patterns = np.array([np.random.choice([-1, 1], size=N) for _ in range(100)])
+
+for beta in [0.1, 0.5, 1.0, 2.0, 5.0]:
+    successes = 0
+    for trial in range(20):
+        state = patterns[0].astype(float).copy()
+        noise_mask = np.random.rand(N) < 0.3
+        state[noise_mask] *= -1
+
+        for iteration in range(20):
+            new_state = hopfield_update(state, patterns, beta=beta)
+            if np.allclose(new_state, state, atol=1e-6):
+                break
+            state = new_state
+
+        retrieved = np.sign(state)
+        if np.array_equal(retrieved, patterns[0]):
+            successes += 1
+
+    print(f'beta={beta}: {successes}/20 correct')
