@@ -3,61 +3,98 @@ import matplotlib.pyplot as plt
 from sklearn.datasets import fetch_openml
 from sklearn.metrics import confusion_matrix
 import sys
+from sklearn.decomposition import PCA
 
-# redirect stdout to file
+
 console_output_file = 'mnist_console_output.txt'
 sys.stdout = open(console_output_file, 'w')
-print(f'writing to {console_output_file}')
 
-# hopfield update
+
+# softmax
 
 def softmax(x, beta=1.0):
     e = np.exp(beta * (x - np.max(x)))
     return e / e.sum()
 
-def hopfield_update(state, patterns, beta=1.0):
+
+# hopfield update (top-k attention)
+
+def hopfield_update(state, patterns, beta=1.0, k=20):
+
     similarities = (patterns @ state) / np.sqrt(state.shape[0])
-    weights = softmax(similarities, beta)
-    return patterns.T @ weights
+
+    top_idx = np.argsort(similarities)[-k:]
+    top_patterns = patterns[top_idx]
+    top_sims = similarities[top_idx]
+
+    weights = softmax(top_sims, beta)
+
+    return top_patterns.T @ weights
 
 
-def retrieve(corrupted, patterns, beta=2.0, max_iters=20, tol=1e-6):
+# retrieval dynamics
+
+def retrieve_with_trajectory(corrupted, patterns, beta=4.0, max_iters=10, tol=1e-6, k=20):
+
     state = corrupted.astype(float).copy()
+    trajectory = [state.copy()]
 
     for _ in range(max_iters):
-        new_state = hopfield_update(state, patterns, beta)
 
-        # print('similarity to closest memory:', 
-        #       np.max(patterns @ new_state))
+        new_state = hopfield_update(state, patterns, beta=beta, k=k)
+
+        trajectory.append(new_state.copy())
 
         if np.linalg.norm(new_state - state) < tol:
             break
 
         state = new_state
 
-    return state
+    return state, trajectory
 
 
 # noise model
 
 def corrupt_pattern(x, noise_level=0.3):
+
     corrupted = x.copy()
+
     mask = np.random.rand(x.shape[0]) < noise_level
+
     corrupted[mask] *= -1
+
     return corrupted
 
 
-# classification via nearest stored pattern
+# nearest stored label
 
 def nearest_label(x, patterns, labels):
+
     similarities = (patterns @ x) / np.sqrt(x.shape[0])
+
     idx = np.argmax(similarities)
+
     return labels[idx]
 
 
-# evaluation loop
+# prototype creation
 
-def evaluate(X_test, y_test, patterns, pattern_labels, beta=2.0, noise_level=0.3):
+def make_prototypes(X_binary, y, digit, n_prototypes=5, samples_per_proto=10):
+
+    digit_imgs = X_binary[y == digit][:n_prototypes * samples_per_proto]
+
+    groups = digit_imgs.reshape(n_prototypes, samples_per_proto, -1)
+
+    prototypes = np.sign(groups.mean(axis=1))
+
+    prototypes[prototypes == 0] = 1
+
+    return prototypes
+
+
+# evaluation
+
+def evaluate(X_test, y_test, patterns, pattern_labels, beta=4.0, noise_level=0.3, k=20):
 
     preds = []
     pixel_overlaps = []
@@ -66,7 +103,7 @@ def evaluate(X_test, y_test, patterns, pattern_labels, beta=2.0, noise_level=0.3
 
         corrupted = corrupt_pattern(x, noise_level)
 
-        state = retrieve(corrupted, patterns, beta)
+        state, _ = retrieve_with_trajectory(corrupted, patterns, beta=beta, k=k)
 
         retrieved = np.sign(state)
 
@@ -89,7 +126,7 @@ def evaluate(X_test, y_test, patterns, pattern_labels, beta=2.0, noise_level=0.3
 
 # visualisation
 
-def show_examples(X_test, patterns, pattern_labels, beta=2.0, noise_level=0.3, n=5):
+def show_examples(X_test, patterns, pattern_labels, beta=4.0, noise_level=0.3, k=20, n=5):
 
     fig, axes = plt.subplots(n,3, figsize=(6,2*n))
 
@@ -99,7 +136,9 @@ def show_examples(X_test, patterns, pattern_labels, beta=2.0, noise_level=0.3, n
 
         corrupted = corrupt_pattern(x, noise_level)
 
-        retrieved = retrieve(corrupted, patterns, beta)
+        state, _ = retrieve_with_trajectory(corrupted, patterns, beta=beta, k=k)
+
+        retrieved = np.sign(state)
 
         axes[i,0].imshow(x.reshape(28,28), cmap='gray')
         axes[i,0].set_title('original')
@@ -117,104 +156,151 @@ def show_examples(X_test, patterns, pattern_labels, beta=2.0, noise_level=0.3, n
     plt.show()
 
 
+# visualisation
+
+def show_trajectory(x, patterns, beta=4.0, noise_level=0.3, k=20):
+
+    corrupted = corrupt_pattern(x, noise_level)
+
+    final_state, trajectory = retrieve_with_trajectory(
+        corrupted, patterns, beta=beta, k=k
+    )
+
+    steps = len(trajectory)
+
+    fig, axes = plt.subplots(1, steps+1, figsize=(2*(steps+1),2))
+
+    axes[0].imshow(x.reshape(28,28), cmap='gray')
+    axes[0].set_title("original")
+    axes[0].axis("off")
+
+    for i, state in enumerate(trajectory):
+
+        axes[i+1].imshow(np.sign(state).reshape(28,28), cmap='gray')
+        axes[i+1].set_title(f"step {i}")
+        axes[i+1].axis("off")
+
+    plt.show()
+
+def plot_pca_trajectory(x, patterns, pattern_labels, beta=4.0, noise_level=0.3, k=20):
+
+    corrupted = corrupt_pattern(x, noise_level)
+
+    final_state, trajectory = retrieve_with_trajectory(
+        corrupted, patterns, beta=beta, k=k
+    )
+
+    # convert trajectory list → array
+    traj = np.array(trajectory)
+
+    # build PCA using stored memories
+    pca = PCA(n_components=2)
+    pca.fit(patterns)
+
+    patterns_2d = pca.transform(patterns)
+    traj_2d = pca.transform(traj)
+
+    plt.figure(figsize=(6,6))
+
+    # plot memory points
+    for d in range(10):
+        mask = pattern_labels == d
+        plt.scatter(
+            patterns_2d[mask,0],
+            patterns_2d[mask,1],
+            label=str(d),
+            alpha=0.6
+        )
+
+    # plot trajectory
+    plt.plot(traj_2d[:,0], traj_2d[:,1], 'k-o', label="trajectory")
+
+    # start/end markers
+    plt.scatter(traj_2d[0,0], traj_2d[0,1], c='red', s=100, label="start")
+    plt.scatter(traj_2d[-1,0], traj_2d[-1,1], c='green', s=100, label="final")
+
+    plt.legend()
+    plt.title("Hopfield retrieval trajectory (PCA space)")
+    plt.show()
+
 # load MNIST
 
-print('Loading MNIST...')
+print("Loading MNIST...")
 
 mnist = fetch_openml('mnist_784', version=1, as_frame=False)
 
 X = mnist.data
 y = mnist.target.astype(int)
 
-# binarise
 X_binary = np.where(X > 127, 1.0, -1.0)
 
 
-# memory setup
+# build prototype memories
 
-memory_sizes = [1, 2, 5, 10, 20, 50]
+n_prototypes = 5
+samples_per_proto = 10
 
-memory_sizes = [1,2,5,10,20,50]
+patterns = np.vstack([
+    make_prototypes(X_binary, y, d, n_prototypes, samples_per_proto)
+    for d in range(10)
+])
 
-results = []
+pattern_labels = np.hstack([
+    [d]*n_prototypes
+    for d in range(10)
+])
 
-for stored_per_digit in memory_sizes:
-
-    patterns = np.vstack([
-        X_binary[y == d][:stored_per_digit]
-        for d in range(10)
-    ])
-
-    pattern_labels = np.hstack([
-        [d]*stored_per_digit
-        for d in range(10)
-    ])
-
-    X_test = np.vstack([
-        X_binary[y == d][stored_per_digit:stored_per_digit+50]
-        for d in range(10)
-    ])
-
-    y_test = np.hstack([
-        [d]*50
-        for d in range(10)
-    ])
-
-    acc, pix, _ = evaluate(
-        X_test,
-        y_test,
-        patterns,
-        pattern_labels,
-        beta=4.0,
-        noise_level=0.3
-    )
-
-    print(
-        f"stored_per_digit={stored_per_digit} "
-        f"total_memories={len(patterns)} "
-        f"accuracy={acc:.3f}"
-    )
-
-    results.append((len(patterns), acc))
+print("Stored memories:", len(patterns))
 
 
-# hyperparameter sweep
+# test set
 
-# betas = [0.5, 1.0, 2.0, 4.0]
-# noise_levels = [0.1, 0.3, 0.5, 0.7]
+test_per_digit = 50
 
-# for beta in betas:
+X_test = np.vstack([
+    X_binary[y == d][n_prototypes*samples_per_proto:
+                    n_prototypes*samples_per_proto + test_per_digit]
+    for d in range(10)
+])
 
-#     for noise in noise_levels:
-
-#         acc, pix, _ = evaluate(X_test, y_test, patterns, pattern_labels,
-#                                beta=beta, noise_level=noise)
-
-#         print(
-#             f'beta={beta:.1f}  noise={noise:.1f}  digit_acc={acc:.3f}  pixel_overlap={pix:.3f}'
-#         )
+y_test = np.hstack([
+    [d]*test_per_digit
+    for d in range(10)
+])
 
 
-# confusion matrix
+# evaluate
 
-acc, pix, cm = evaluate(X_test, y_test, patterns, pattern_labels,
-                        beta=2.0, noise_level=0.3)
+acc, pix, cm = evaluate(
+    X_test,
+    y_test,
+    patterns,
+    pattern_labels,
+    beta=4.0,
+    noise_level=0.3,
+    k=20
+)
 
-print('\nFinal accuracy:', acc)
-print('\nConfusion matrix:\n', cm)
+print("\nDigit accuracy:", acc)
+print("Pixel overlap:", pix)
+
+print("\nConfusion matrix:\n", cm)
 
 
 # example reconstructions
 
-show_examples(X_test, patterns, pattern_labels, beta=2.0, noise_level=0.3)
+show_examples(
+    X_test,
+    patterns,
+    pattern_labels,
+    beta=4.0,
+    noise_level=0.3,
+    k=20
+)
+
+show_trajectory(X_test[0], patterns, beta=4.0, noise_level=0.3)
+
+patterns = patterns / np.linalg.norm(patterns, axis=1, keepdims=True)
+plot_pca_trajectory(X_test[0], patterns, pattern_labels)
+
 sys.stdout.close()
-
-memories = [r[0] for r in results]
-accuracies = [r[1] for r in results]
-
-plt.figure()
-plt.plot(memories, accuracies, marker='o')
-plt.xlabel("Number of stored patterns")
-plt.ylabel("Digit classification accuracy")
-plt.title("Hopfield memory capacity experiment")
-plt.show()
