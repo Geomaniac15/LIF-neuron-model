@@ -1,0 +1,22 @@
+writing to mnist_console_output.txt
+Loading MNIST...
+stored_per_digit=1 total_memories=10 accuracy=0.442
+stored_per_digit=2 total_memories=20 accuracy=0.464
+stored_per_digit=5 total_memories=50 accuracy=0.540
+stored_per_digit=10 total_memories=100 accuracy=0.556
+stored_per_digit=20 total_memories=200 accuracy=0.582
+stored_per_digit=50 total_memories=500 accuracy=0.600
+
+Final accuracy: 0.3
+
+Confusion matrix:
+ [[19 28  0  1  0  0  1  0  0  1]
+ [ 0 50  0  0  0  0  0  0  0  0]
+ [ 0 43  5  1  1  0  0  0  0  0]
+ [ 0 43  0  6  0  0  0  0  0  1]
+ [ 0 24  0  0  7  0  0  1  0 18]
+ [ 0 50  0  0  0  0  0  0  0  0]
+ [ 0 32  0  0  0  0 18  0  0  0]
+ [ 0 28  0  0  0  0  0 17  0  5]
+ [ 0 44  0  0  0  0  0  0  4  2]
+ [ 0 24  0  0  0  0  0  2  0 24]]

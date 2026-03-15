@@ -1,70 +1,220 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.datasets import fetch_openml
-from hopfield_with_softmax import hopfield_update
+from sklearn.metrics import confusion_matrix
+import sys
+
+# redirect stdout to file
+console_output_file = 'mnist_console_output.txt'
+sys.stdout = open(console_output_file, 'w')
+print(f'writing to {console_output_file}')
+
+# hopfield update
+
+def softmax(x, beta=1.0):
+    e = np.exp(beta * (x - np.max(x)))
+    return e / e.sum()
+
+def hopfield_update(state, patterns, beta=1.0):
+    similarities = (patterns @ state) / np.sqrt(state.shape[0])
+    weights = softmax(similarities, beta)
+    return patterns.T @ weights
+
+
+def retrieve(corrupted, patterns, beta=2.0, max_iters=20, tol=1e-6):
+    state = corrupted.astype(float).copy()
+
+    for _ in range(max_iters):
+        new_state = hopfield_update(state, patterns, beta)
+
+        # print('similarity to closest memory:', 
+        #       np.max(patterns @ new_state))
+
+        if np.linalg.norm(new_state - state) < tol:
+            break
+
+        state = new_state
+
+    return state
+
+
+# noise model
+
+def corrupt_pattern(x, noise_level=0.3):
+    corrupted = x.copy()
+    mask = np.random.rand(x.shape[0]) < noise_level
+    corrupted[mask] *= -1
+    return corrupted
+
+
+# classification via nearest stored pattern
+
+def nearest_label(x, patterns, labels):
+    similarities = (patterns @ x) / np.sqrt(x.shape[0])
+    idx = np.argmax(similarities)
+    return labels[idx]
+
+
+# evaluation loop
+
+def evaluate(X_test, y_test, patterns, pattern_labels, beta=2.0, noise_level=0.3):
+
+    preds = []
+    pixel_overlaps = []
+
+    for x, true_label in zip(X_test, y_test):
+
+        corrupted = corrupt_pattern(x, noise_level)
+
+        state = retrieve(corrupted, patterns, beta)
+
+        retrieved = np.sign(state)
+
+        pred = nearest_label(retrieved, patterns, pattern_labels)
+
+        preds.append(pred)
+
+        overlap = np.mean(retrieved == x)
+        pixel_overlaps.append(overlap)
+
+    preds = np.array(preds)
+
+    digit_accuracy = np.mean(preds == y_test)
+    pixel_accuracy = np.mean(pixel_overlaps)
+
+    cm = confusion_matrix(y_test, preds)
+
+    return digit_accuracy, pixel_accuracy, cm
+
+
+# visualisation
+
+def show_examples(X_test, patterns, pattern_labels, beta=2.0, noise_level=0.3, n=5):
+
+    fig, axes = plt.subplots(n,3, figsize=(6,2*n))
+
+    for i in range(n):
+
+        x = X_test[i]
+
+        corrupted = corrupt_pattern(x, noise_level)
+
+        retrieved = retrieve(corrupted, patterns, beta)
+
+        axes[i,0].imshow(x.reshape(28,28), cmap='gray')
+        axes[i,0].set_title('original')
+
+        axes[i,1].imshow(corrupted.reshape(28,28), cmap='gray')
+        axes[i,1].set_title('corrupted')
+
+        axes[i,2].imshow(retrieved.reshape(28,28), cmap='gray')
+        axes[i,2].set_title('retrieved')
+
+        for ax in axes[i]:
+            ax.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+
+# load MNIST
+
+print('Loading MNIST...')
 
 mnist = fetch_openml('mnist_784', version=1, as_frame=False)
+
 X = mnist.data
 y = mnist.target.astype(int)
 
+# binarise
 X_binary = np.where(X > 127, 1.0, -1.0)
-# print(X_binary)
 
-# get indices of digit 0
-digit_indices = np.where(y == 0)[0]
 
-# take first 5
-patterns = X_binary[digit_indices[:5]]
+# memory setup
 
-# fig, axes = plt.subplots(1, 5, figsize=(12, 3))
-# for i, ax in enumerate(axes):
-#     ax.imshow(patterns[i].reshape(28, 28), cmap='gray')
-#     ax.axis('off')
-#     ax.set_title(f'pattern {i}')
-# plt.suptitle('stored patterns (digit 0)')
-# plt.show()
+memory_sizes = [1, 2, 5, 10, 20, 50]
 
-# store 10 examples of each digit
-patterns = np.vstack([X_binary[y == d][:10] for d in range(10)])
-print(f'stored {len(patterns)} patterns total')
+memory_sizes = [1,2,5,10,20,50]
 
-N = 784
-beta = 1 / np.sqrt(N)
+results = []
 
-# get a single zero to corrupt
-zero_patterns = X_binary[y == 0]
-original = zero_patterns[0].copy()
+for stored_per_digit in memory_sizes:
 
-# corrupt bottom half
-corrupted = original.copy()
-corrupted[784//2:] = -1
+    patterns = np.vstack([
+        X_binary[y == d][:stored_per_digit]
+        for d in range(10)
+    ])
 
-# retrieve from full MNIST
-state = corrupted.copy()
-beta = 2.0
-for iteration in range(20):
-    new_state = hopfield_update(state, X_binary, beta=beta)
-    if np.allclose(new_state, state, atol=1e-6):
-        print(f'converged at iteration {iteration}')
-        break
-    state = new_state
+    pattern_labels = np.hstack([
+        [d]*stored_per_digit
+        for d in range(10)
+    ])
 
-# find which stored zero is most similar to the retrieved state
-similarities = X_binary @ state
-most_similar_idx = np.argmax(similarities)
-most_similar = X_binary[most_similar_idx]
+    X_test = np.vstack([
+        X_binary[y == d][stored_per_digit:stored_per_digit+50]
+        for d in range(10)
+    ])
 
-fig, axes = plt.subplots(1, 4, figsize=(12, 3))
-axes[0].imshow(original.reshape(28, 28), cmap='gray')
-axes[0].set_title('original')
-axes[0].axis('off')
-axes[1].imshow(corrupted.reshape(28, 28), cmap='gray')
-axes[1].set_title('corrupted')
-axes[1].axis('off')
-axes[2].imshow(state.reshape(28, 28), cmap='gray')
-axes[2].set_title('retrieved')
-axes[2].axis('off')
-axes[3].imshow(most_similar.reshape(28, 28), cmap='gray')
-axes[3].set_title(f'nearest neighbour\n(digit {y[most_similar_idx]})')
-axes[3].axis('off')
+    y_test = np.hstack([
+        [d]*50
+        for d in range(10)
+    ])
+
+    acc, pix, _ = evaluate(
+        X_test,
+        y_test,
+        patterns,
+        pattern_labels,
+        beta=4.0,
+        noise_level=0.3
+    )
+
+    print(
+        f"stored_per_digit={stored_per_digit} "
+        f"total_memories={len(patterns)} "
+        f"accuracy={acc:.3f}"
+    )
+
+    results.append((len(patterns), acc))
+
+
+# hyperparameter sweep
+
+# betas = [0.5, 1.0, 2.0, 4.0]
+# noise_levels = [0.1, 0.3, 0.5, 0.7]
+
+# for beta in betas:
+
+#     for noise in noise_levels:
+
+#         acc, pix, _ = evaluate(X_test, y_test, patterns, pattern_labels,
+#                                beta=beta, noise_level=noise)
+
+#         print(
+#             f'beta={beta:.1f}  noise={noise:.1f}  digit_acc={acc:.3f}  pixel_overlap={pix:.3f}'
+#         )
+
+
+# confusion matrix
+
+acc, pix, cm = evaluate(X_test, y_test, patterns, pattern_labels,
+                        beta=2.0, noise_level=0.3)
+
+print('\nFinal accuracy:', acc)
+print('\nConfusion matrix:\n', cm)
+
+
+# example reconstructions
+
+show_examples(X_test, patterns, pattern_labels, beta=2.0, noise_level=0.3)
+sys.stdout.close()
+
+memories = [r[0] for r in results]
+accuracies = [r[1] for r in results]
+
+plt.figure()
+plt.plot(memories, accuracies, marker='o')
+plt.xlabel("Number of stored patterns")
+plt.ylabel("Digit classification accuracy")
+plt.title("Hopfield memory capacity experiment")
 plt.show()
