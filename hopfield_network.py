@@ -13,7 +13,11 @@ np.fill_diagonal(W, 0)  # no self connections
 np.savetxt('W.txt', W.round(3), fmt='%.3f')
 
 state = pattern_A.copy()
-noisy_A = np.random.rand(state) < 0.2 # flip 20% bits
+noise_mask = np.random.rand(N) < 0.2 # flip 20% bits
+state[noise_mask] *= -1
+
+print('noisy input:', state)
+print('pattern A: ', pattern_A)
 
 # then update repeatedly until convergence
 for iteration in range(20):
