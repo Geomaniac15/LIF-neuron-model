@@ -33,25 +33,19 @@ beta = 1 / np.sqrt(N)
 
 # corrupt a 7 and retrieve
 seven_idx = np.where(y == 7)[0][0]
-corrupted = X_binary[seven_idx].copy()
-corrupted[784//2:] = -1
 
-state = corrupted.copy()
-for iteration in range(20):
-    new_state = hopfield_update(state, patterns, beta=beta)
-    if np.allclose(new_state, state, atol=1e-6):
-        break
-    state = new_state
-
-fig, axes = plt.subplots(1, 3, figsize=(9, 3))
-axes[0].imshow(X_binary[seven_idx].reshape(28, 28), cmap='gray')
-axes[0].set_title('original (7)')
-axes[0].axis('off')
-axes[1].imshow(corrupted.reshape(28, 28), cmap='gray')
-axes[1].set_title('corrupted')
-axes[1].axis('off')
-axes[2].imshow(state.reshape(28, 28), cmap='gray')
-axes[2].set_title('retrieved')
-axes[2].axis('off')
-plt.suptitle('Hopfield retrieval: 100 patterns, 10 per digit')
+fig, axes = plt.subplots(1, 4, figsize=(14, 3))
+for idx, beta in enumerate([1.0, 2.0, 3.0, 5.0]):
+    corrupted = X_binary[seven_idx].copy()
+    corrupted[784//2:] = -1
+    state = corrupted.copy()
+    for iteration in range(20):
+        new_state = hopfield_update(state, patterns, beta=beta)
+        if np.allclose(new_state, state, atol=1e-6):
+            break
+        state = new_state
+    axes[idx].imshow(state.reshape(28, 28), cmap='gray')
+    axes[idx].set_title(f'beta={beta}')
+    axes[idx].axis('off')
+plt.suptitle('effect of beta on retrieval sharpness')
 plt.show()
