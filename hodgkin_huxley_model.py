@@ -20,6 +20,10 @@ h = 0.6
 n = 0.32
 
 voltage_history = []
+m_history = []
+h_history = []
+n_history = []
+
 
 for _ in range(5000):
     # for m (sodium activation)
@@ -53,14 +57,22 @@ for _ in range(5000):
     V = V + dV * dt
 
     voltage_history.append(V)
-
-times = [t for t, i in voltage_history]
-neurons = [i for t, i in voltage_history]
+    m_history.append(m)
+    h_history.append(h)
+    n_history.append(n)
 
 times = np.arange(len(voltage_history)) * dt
-plt.figure(figsize=(12, 4))
-plt.plot(times, voltage_history, color='teal')
-plt.xlabel('time (ms)')
-plt.ylabel('voltage (mV)')
-plt.title('Hodgkin-Huxley neuron')
+
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+
+ax1.plot(times, voltage_history, color='teal')
+ax1.set_ylabel('voltage (mV)')
+
+ax2.plot(times, m_history, label='m (Na activation)')
+ax2.plot(times, h_history, label='h (Na inactivation)')
+ax2.plot(times, n_history, label='n (K activation)')
+ax2.set_ylabel('gating variable')
+ax2.set_xlabel('time (ms)')
+ax2.legend()
+
 plt.show()
