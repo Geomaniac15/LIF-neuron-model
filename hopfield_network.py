@@ -4,6 +4,15 @@ import matplotlib.pyplot as plt
 def energy(state, W):
     return -0.5 * state @ W @ state
 
+def softmax(x, beta=1.0):
+    e = np.exp(beta * (x - np.max(x)))  # subtract max for numerical stability
+    return e / e.sum()
+
+def hopfield_update(state, patterns, beta=1.0):
+    similarities = patterns @ state
+    weights = softmax(similarities, beta)
+    return patterns.T @ weights
+
 N = 100  # neurons
 n_patterns = 14
 patterns = [np.random.choice([-1, 1], size=N) for _ in range(n_patterns)]
