@@ -55,24 +55,24 @@ n_trials = 100
 
 #     print(f'{n_patterns} patterns: {successes}/{n_trials} correct')
 
-patterns = np.array([np.random.choice([-1, 1], size=N) for _ in range(100)])
+# patterns = np.array([np.random.choice([-1, 1], size=N) for _ in range(100)])
 
-for d in [4, 8, 16, 32, 64, 100]:
-    beta = 1 / np.sqrt(d)
-    successes = 0
-    for trial in range(20):
-        state = patterns[0].astype(float).copy()
-        noise_mask = np.random.rand(N) < 0.3
-        state[noise_mask] *= -1
+# for d in [4, 8, 16, 32, 64, 100]:
+#     beta = 1 / np.sqrt(d)
+#     successes = 0
+#     for trial in range(20):
+#         state = patterns[0].astype(float).copy()
+#         noise_mask = np.random.rand(N) < 0.3
+#         state[noise_mask] *= -1
 
-        for iteration in range(20):
-            new_state = hopfield_update(state, patterns, beta=beta)
-            if np.allclose(new_state, state, atol=1e-6):
-                break
-            state = new_state
+#         for iteration in range(20):
+#             new_state = hopfield_update(state, patterns, beta=beta)
+#             if np.allclose(new_state, state, atol=1e-6):
+#                 break
+#             state = new_state
 
-        retrieved = np.sign(state)
-        if np.array_equal(retrieved, patterns[0]):
-            successes += 1
+#         retrieved = np.sign(state)
+#         if np.array_equal(retrieved, patterns[0]):
+#             successes += 1
 
-    print(f'd={d}, beta={beta:.3f}: {successes}/20 correct')
+#     print(f'd={d}, beta={beta:.3f}: {successes}/20 correct')
