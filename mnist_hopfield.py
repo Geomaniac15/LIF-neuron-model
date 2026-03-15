@@ -24,35 +24,34 @@ patterns = X_binary[digit_indices[:5]]
 # plt.suptitle('stored patterns (digit 0)')
 # plt.show()
 
-# corrupt pattern 0 by blanking bottom half
-corrupted = patterns[0].copy()
-corrupted[784//2:] = -1  # set bottom 392 pixels to background
+# store 10 examples of each digit
+patterns = np.vstack([X_binary[y == d][:10] for d in range(10)])
+print(f'stored {len(patterns)} patterns total')
 
-# run retrieval
 N = 784
-beta = 1 / np.sqrt(N)  # tune this if needed
+beta = 1 / np.sqrt(N)
+
+# corrupt a 7 and retrieve
+seven_idx = np.where(y == 7)[0][0]
+corrupted = X_binary[seven_idx].copy()
+corrupted[784//2:] = -1
 
 state = corrupted.copy()
 for iteration in range(20):
     new_state = hopfield_update(state, patterns, beta=beta)
     if np.allclose(new_state, state, atol=1e-6):
-        print(f'converged at iteration {iteration}')
         break
     state = new_state
 
-# plot original, corrupted, retrieved side by side
 fig, axes = plt.subplots(1, 3, figsize=(9, 3))
-axes[0].imshow(patterns[0].reshape(28, 28), cmap='gray')
-axes[0].set_title('original')
+axes[0].imshow(X_binary[seven_idx].reshape(28, 28), cmap='gray')
+axes[0].set_title('original (7)')
 axes[0].axis('off')
-
 axes[1].imshow(corrupted.reshape(28, 28), cmap='gray')
 axes[1].set_title('corrupted')
 axes[1].axis('off')
-
 axes[2].imshow(state.reshape(28, 28), cmap='gray')
 axes[2].set_title('retrieved')
 axes[2].axis('off')
-
-plt.suptitle('Hopfield memory retrieval on MNIST')
+plt.suptitle('Hopfield retrieval: 100 patterns, 10 per digit')
 plt.show()
