@@ -4,6 +4,7 @@ from sklearn.datasets import fetch_openml
 from sklearn.metrics import confusion_matrix
 import sys
 from sklearn.decomposition import PCA
+from matplotlib.animation import FuncAnimation
 
 
 console_output_file = 'mnist_console_output.txt'
@@ -34,7 +35,7 @@ def hopfield_update(state, patterns, beta=1.0, k=20):
 
 # retrieval dynamics
 
-def retrieve_with_trajectory(corrupted, patterns, beta=4.0, max_iters=10, tol=1e-6, k=20):
+def retrieve_with_trajectory(corrupted, patterns, beta=4.0, max_iters=40, tol=1e-6, k=20):
 
     state = corrupted.astype(float).copy()
     trajectory = [state.copy()]
@@ -48,7 +49,7 @@ def retrieve_with_trajectory(corrupted, patterns, beta=4.0, max_iters=10, tol=1e
         if np.linalg.norm(new_state - state) < tol:
             break
 
-        state = new_state
+        state = 0.6*state + 0.4*new_state
 
     return state, trajectory
 
@@ -155,6 +156,65 @@ def show_examples(X_test, patterns, pattern_labels, beta=4.0, noise_level=0.3, k
     plt.tight_layout()
     plt.show()
 
+def animate_trajectory(x, patterns, pattern_labels, beta=4.0, noise_level=0.3, k=20):
+
+    corrupted = corrupt_pattern(x, noise_level)
+
+    final_state, trajectory = retrieve_with_trajectory(
+        corrupted, patterns, beta=beta, k=k
+    )
+
+    traj = np.vstack([corrupted, trajectory])
+
+    pca = PCA(n_components=2)
+    pca.fit(patterns)
+
+    patterns_2d = pca.transform(patterns)
+    traj_2d = pca.transform(traj)
+
+    fig, ax = plt.subplots(figsize=(6,6))
+
+    # plot memory clusters
+    for d in range(10):
+        mask = pattern_labels == d
+        ax.scatter(
+            patterns_2d[mask,0],
+            patterns_2d[mask,1],
+            label=str(d),
+            alpha=0.6
+        )
+
+    point, = ax.plot([], [], 'ro', markersize=8)
+    line, = ax.plot([], [], 'k-', lw=2)
+
+    ax.set_title("Hopfield retrieval animation")
+    ax.legend()
+
+    def update(frame):
+
+        point.set_data(traj_2d[frame,0], traj_2d[frame,1])
+
+        line.set_data(
+            traj_2d[:frame+1,0],
+            traj_2d[:frame+1,1]
+        )
+
+        return point, line
+
+    anim = FuncAnimation(
+        fig,
+        update,
+        frames=len(traj_2d),
+        interval=500,
+        blit=True
+    )
+
+    anim.save("hopfield_animation.gif", writer="pillow")
+
+
+    plt.show()
+
+    return anim
 
 # visualisation
 
@@ -302,5 +362,6 @@ show_trajectory(X_test[0], patterns, beta=4.0, noise_level=0.3)
 
 patterns = patterns / np.linalg.norm(patterns, axis=1, keepdims=True)
 plot_pca_trajectory(X_test[0], patterns, pattern_labels)
+animate_trajectory(X_test[0], patterns, pattern_labels)
 
 sys.stdout.close()
