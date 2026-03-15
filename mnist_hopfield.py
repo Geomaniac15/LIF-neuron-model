@@ -31,21 +31,40 @@ print(f'stored {len(patterns)} patterns total')
 N = 784
 beta = 1 / np.sqrt(N)
 
-# corrupt a 7 and retrieve
-seven_idx = np.where(y == 7)[0][0]
+# get a single zero to corrupt
+zero_patterns = X_binary[y == 0]
+original = zero_patterns[0].copy()
 
-fig, axes = plt.subplots(1, 4, figsize=(14, 3))
-for idx, beta in enumerate([1.0, 2.0, 3.0, 5.0]):
-    corrupted = X_binary[seven_idx].copy()
-    corrupted[784//2:] = -1
-    state = corrupted.copy()
-    for iteration in range(20):
-        new_state = hopfield_update(state, patterns, beta=beta)
-        if np.allclose(new_state, state, atol=1e-6):
-            break
-        state = new_state
-    axes[idx].imshow(state.reshape(28, 28), cmap='gray')
-    axes[idx].set_title(f'beta={beta}')
-    axes[idx].axis('off')
-plt.suptitle('effect of beta on retrieval sharpness')
+# corrupt bottom half
+corrupted = original.copy()
+corrupted[784//2:] = -1
+
+# retrieve from full MNIST
+state = corrupted.copy()
+beta = 2.0
+for iteration in range(20):
+    new_state = hopfield_update(state, X_binary, beta=beta)
+    if np.allclose(new_state, state, atol=1e-6):
+        print(f'converged at iteration {iteration}')
+        break
+    state = new_state
+
+# find which stored zero is most similar to the retrieved state
+similarities = X_binary @ state
+most_similar_idx = np.argmax(similarities)
+most_similar = X_binary[most_similar_idx]
+
+fig, axes = plt.subplots(1, 4, figsize=(12, 3))
+axes[0].imshow(original.reshape(28, 28), cmap='gray')
+axes[0].set_title('original')
+axes[0].axis('off')
+axes[1].imshow(corrupted.reshape(28, 28), cmap='gray')
+axes[1].set_title('corrupted')
+axes[1].axis('off')
+axes[2].imshow(state.reshape(28, 28), cmap='gray')
+axes[2].set_title('retrieved')
+axes[2].axis('off')
+axes[3].imshow(most_similar.reshape(28, 28), cmap='gray')
+axes[3].set_title(f'nearest neighbour\n(digit {y[most_similar_idx]})')
+axes[3].axis('off')
 plt.show()
