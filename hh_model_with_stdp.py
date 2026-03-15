@@ -25,7 +25,7 @@ pattern_B[10:] = 1
 W_in = np.random.rand(N_in, N_out) * 0.5
 
 # lateral inhibition, output to output, fixed negative weights
-W_lat = np.full((N_out, N_out), 2.0)
+W_lat = np.full((N_out, N_out), 5.0)
 np.fill_diagonal(W_lat, 0)  # no self connections
 
 V_out = np.full(N_out, V_rest)
@@ -42,6 +42,11 @@ for trial in range(100):
     # alternate patterns
     pattern = pattern_A if trial % 2 == 0 else pattern_B
     I_ext_in = pattern * 3.0  # active neurons get 3 nA
+
+    V_out = np.full(N_out, V_rest)
+    g_exc = np.zeros(N_out)
+    g_inh = np.zeros(N_out)
+    refractory = np.zeros(N_out)
 
     for step in range(500):  # 50ms per pattern
         t = (trial * 500 + step) * dt

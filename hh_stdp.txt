@@ -1,0 +1,9 @@
+output neuron spike counts for noisy pattern A:
+[ 0  0 24  0  0 25  0  0  0  0]
+most active neuron: 5
+pattern A: [1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0]
+pattern B: [0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1]
+overlap: 0.0 shared active neurons
+clean A winner: neuron 2
+noisy A winner: neuron 5
+pattern B winner: neuron 5
