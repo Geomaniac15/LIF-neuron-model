@@ -1,0 +1,459 @@
+Loading MNIST...
+Stored memories: 50
+FAIL: idx=3, true=0, pred=5
+Convergence steps: 7
+FAIL: idx=6, true=0, pred=7
+Convergence steps: 11
+FAIL: idx=12, true=0, pred=5
+Convergence steps: 5
+FAIL: idx=18, true=0, pred=5
+Convergence steps: 4
+FAIL: idx=21, true=0, pred=8
+Convergence steps: 5
+FAIL: idx=24, true=0, pred=6
+Convergence steps: 5
+FAIL: idx=25, true=0, pred=6
+Convergence steps: 6
+FAIL: idx=34, true=0, pred=5
+Convergence steps: 6
+FAIL: idx=36, true=0, pred=5
+Convergence steps: 5
+FAIL: idx=37, true=0, pred=2
+Convergence steps: 5
+FAIL: idx=39, true=0, pred=1
+Convergence steps: 13
+FAIL: idx=42, true=0, pred=5
+Convergence steps: 6
+FAIL: idx=43, true=0, pred=5
+Convergence steps: 6
+FAIL: idx=44, true=0, pred=8
+Convergence steps: 4
+FAIL: idx=46, true=0, pred=5
+Convergence steps: 6
+FAIL: idx=48, true=0, pred=5
+Convergence steps: 6
+FAIL: idx=61, true=1, pred=9
+Convergence steps: 8
+FAIL: idx=64, true=1, pred=5
+Convergence steps: 7
+FAIL: idx=69, true=1, pred=4
+Convergence steps: 8
+FAIL: idx=77, true=1, pred=8
+Convergence steps: 5
+FAIL: idx=92, true=1, pred=9
+Convergence steps: 8
+FAIL: idx=101, true=2, pred=1
+Convergence steps: 21
+FAIL: idx=103, true=2, pred=5
+Convergence steps: 7
+FAIL: idx=104, true=2, pred=3
+Convergence steps: 5
+FAIL: idx=105, true=2, pred=3
+Convergence steps: 7
+FAIL: idx=107, true=2, pred=1
+Convergence steps: 10
+FAIL: idx=110, true=2, pred=7
+Convergence steps: 10
+FAIL: idx=111, true=2, pred=4
+Convergence steps: 11
+FAIL: idx=112, true=2, pred=1
+Convergence steps: 15
+FAIL: idx=114, true=2, pred=5
+Convergence steps: 5
+FAIL: idx=116, true=2, pred=1
+Convergence steps: 7
+FAIL: idx=117, true=2, pred=1
+Convergence steps: 12
+FAIL: idx=119, true=2, pred=7
+Convergence steps: 8
+FAIL: idx=121, true=2, pred=1
+Convergence steps: 11
+FAIL: idx=123, true=2, pred=1
+Convergence steps: 13
+FAIL: idx=124, true=2, pred=4
+Convergence steps: 11
+FAIL: idx=125, true=2, pred=3
+Convergence steps: 6
+FAIL: idx=126, true=2, pred=8
+Convergence steps: 6
+FAIL: idx=127, true=2, pred=1
+Convergence steps: 12
+FAIL: idx=128, true=2, pred=6
+Convergence steps: 8
+FAIL: idx=132, true=2, pred=8
+Convergence steps: 7
+FAIL: idx=135, true=2, pred=3
+Convergence steps: 5
+FAIL: idx=136, true=2, pred=9
+Convergence steps: 6
+FAIL: idx=137, true=2, pred=9
+Convergence steps: 6
+FAIL: idx=138, true=2, pred=5
+Convergence steps: 6
+FAIL: idx=139, true=2, pred=1
+Convergence steps: 17
+FAIL: idx=140, true=2, pred=1
+Convergence steps: 16
+FAIL: idx=142, true=2, pred=9
+Convergence steps: 6
+FAIL: idx=145, true=2, pred=1
+Convergence steps: 15
+FAIL: idx=146, true=2, pred=3
+Convergence steps: 5
+FAIL: idx=147, true=2, pred=8
+Convergence steps: 6
+FAIL: idx=149, true=2, pred=6
+Convergence steps: 6
+FAIL: idx=150, true=3, pred=7
+Convergence steps: 9
+FAIL: idx=151, true=3, pred=9
+Convergence steps: 6
+FAIL: idx=152, true=3, pred=4
+Convergence steps: 9
+FAIL: idx=153, true=3, pred=5
+Convergence steps: 7
+FAIL: idx=156, true=3, pred=4
+Convergence steps: 8
+FAIL: idx=157, true=3, pred=1
+Convergence steps: 14
+FAIL: idx=159, true=3, pred=1
+Convergence steps: 18
+FAIL: idx=160, true=3, pred=5
+Convergence steps: 7
+FAIL: idx=162, true=3, pred=6
+Convergence steps: 6
+FAIL: idx=163, true=3, pred=7
+Convergence steps: 11
+FAIL: idx=164, true=3, pred=7
+Convergence steps: 8
+FAIL: idx=170, true=3, pred=5
+Convergence steps: 8
+FAIL: idx=173, true=3, pred=9
+Convergence steps: 8
+FAIL: idx=176, true=3, pred=1
+Convergence steps: 8
+FAIL: idx=180, true=3, pred=2
+Convergence steps: 4
+FAIL: idx=188, true=3, pred=1
+Convergence steps: 10
+FAIL: idx=194, true=3, pred=1
+Convergence steps: 16
+FAIL: idx=195, true=3, pred=8
+Convergence steps: 5
+FAIL: idx=196, true=3, pred=5
+Convergence steps: 6
+FAIL: idx=198, true=3, pred=9
+Convergence steps: 6
+FAIL: idx=199, true=3, pred=2
+Convergence steps: 4
+FAIL: idx=201, true=4, pred=7
+Convergence steps: 8
+FAIL: idx=204, true=4, pred=9
+Convergence steps: 7
+FAIL: idx=205, true=4, pred=6
+Convergence steps: 7
+FAIL: idx=206, true=4, pred=9
+Convergence steps: 6
+FAIL: idx=208, true=4, pred=1
+Convergence steps: 19
+FAIL: idx=213, true=4, pred=9
+Convergence steps: 9
+FAIL: idx=215, true=4, pred=5
+Convergence steps: 4
+FAIL: idx=217, true=4, pred=7
+Convergence steps: 10
+FAIL: idx=222, true=4, pred=1
+Convergence steps: 12
+FAIL: idx=223, true=4, pred=6
+Convergence steps: 5
+FAIL: idx=224, true=4, pred=6
+Convergence steps: 5
+FAIL: idx=225, true=4, pred=6
+Convergence steps: 4
+FAIL: idx=227, true=4, pred=1
+Convergence steps: 13
+FAIL: idx=228, true=4, pred=9
+Convergence steps: 6
+FAIL: idx=232, true=4, pred=1
+Convergence steps: 13
+FAIL: idx=234, true=4, pred=9
+Convergence steps: 10
+FAIL: idx=235, true=4, pred=7
+Convergence steps: 9
+FAIL: idx=237, true=4, pred=6
+Convergence steps: 5
+FAIL: idx=238, true=4, pred=9
+Convergence steps: 12
+FAIL: idx=239, true=4, pred=7
+Convergence steps: 12
+FAIL: idx=242, true=4, pred=9
+Convergence steps: 8
+FAIL: idx=245, true=4, pred=1
+Convergence steps: 15
+FAIL: idx=250, true=5, pred=4
+Convergence steps: 8
+FAIL: idx=251, true=5, pred=7
+Convergence steps: 8
+FAIL: idx=252, true=5, pred=4
+Convergence steps: 10
+FAIL: idx=253, true=5, pred=3
+Convergence steps: 5
+FAIL: idx=255, true=5, pred=1
+Convergence steps: 16
+FAIL: idx=256, true=5, pred=2
+Convergence steps: 5
+FAIL: idx=259, true=5, pred=9
+Convergence steps: 8
+FAIL: idx=260, true=5, pred=4
+Convergence steps: 5
+FAIL: idx=261, true=5, pred=0
+Convergence steps: 6
+FAIL: idx=262, true=5, pred=6
+Convergence steps: 6
+FAIL: idx=263, true=5, pred=4
+Convergence steps: 11
+FAIL: idx=264, true=5, pred=3
+Convergence steps: 4
+FAIL: idx=265, true=5, pred=3
+Convergence steps: 6
+FAIL: idx=267, true=5, pred=3
+Convergence steps: 6
+FAIL: idx=270, true=5, pred=1
+Convergence steps: 12
+FAIL: idx=273, true=5, pred=3
+Convergence steps: 8
+FAIL: idx=275, true=5, pred=8
+Convergence steps: 4
+FAIL: idx=278, true=5, pred=1
+Convergence steps: 11
+FAIL: idx=279, true=5, pred=3
+Convergence steps: 7
+FAIL: idx=281, true=5, pred=3
+Convergence steps: 9
+FAIL: idx=283, true=5, pred=6
+Convergence steps: 6
+FAIL: idx=284, true=5, pred=4
+Convergence steps: 9
+FAIL: idx=286, true=5, pred=1
+Convergence steps: 15
+FAIL: idx=287, true=5, pred=8
+Convergence steps: 7
+FAIL: idx=288, true=5, pred=3
+Convergence steps: 5
+FAIL: idx=289, true=5, pred=1
+Convergence steps: 15
+FAIL: idx=290, true=5, pred=3
+Convergence steps: 6
+FAIL: idx=292, true=5, pred=9
+Convergence steps: 7
+FAIL: idx=293, true=5, pred=8
+Convergence steps: 7
+FAIL: idx=295, true=5, pred=3
+Convergence steps: 4
+FAIL: idx=297, true=5, pred=6
+Convergence steps: 6
+FAIL: idx=299, true=5, pred=8
+Convergence steps: 9
+FAIL: idx=301, true=6, pred=1
+Convergence steps: 12
+FAIL: idx=302, true=6, pred=4
+Convergence steps: 11
+FAIL: idx=304, true=6, pred=9
+Convergence steps: 7
+FAIL: idx=306, true=6, pred=1
+Convergence steps: 13
+FAIL: idx=308, true=6, pred=1
+Convergence steps: 16
+FAIL: idx=309, true=6, pred=8
+Convergence steps: 5
+FAIL: idx=310, true=6, pred=8
+Convergence steps: 6
+FAIL: idx=318, true=6, pred=4
+Convergence steps: 9
+FAIL: idx=320, true=6, pred=1
+Convergence steps: 14
+FAIL: idx=328, true=6, pred=0
+Convergence steps: 4
+FAIL: idx=330, true=6, pred=4
+Convergence steps: 8
+FAIL: idx=331, true=6, pred=5
+Convergence steps: 8
+FAIL: idx=333, true=6, pred=5
+Convergence steps: 6
+FAIL: idx=334, true=6, pred=5
+Convergence steps: 4
+FAIL: idx=335, true=6, pred=1
+Convergence steps: 13
+FAIL: idx=337, true=6, pred=4
+Convergence steps: 9
+FAIL: idx=338, true=6, pred=5
+Convergence steps: 8
+FAIL: idx=339, true=6, pred=4
+Convergence steps: 5
+FAIL: idx=340, true=6, pred=5
+Convergence steps: 7
+FAIL: idx=342, true=6, pred=5
+Convergence steps: 4
+FAIL: idx=343, true=6, pred=1
+Convergence steps: 20
+FAIL: idx=345, true=6, pred=1
+Convergence steps: 11
+FAIL: idx=346, true=6, pred=5
+Convergence steps: 5
+FAIL: idx=349, true=6, pred=8
+Convergence steps: 5
+FAIL: idx=351, true=7, pred=4
+Convergence steps: 7
+FAIL: idx=354, true=7, pred=2
+Convergence steps: 6
+FAIL: idx=355, true=7, pred=1
+Convergence steps: 13
+FAIL: idx=356, true=7, pred=9
+Convergence steps: 6
+FAIL: idx=357, true=7, pred=1
+Convergence steps: 14
+FAIL: idx=360, true=7, pred=1
+Convergence steps: 11
+FAIL: idx=363, true=7, pred=1
+Convergence steps: 15
+FAIL: idx=367, true=7, pred=1
+Convergence steps: 14
+FAIL: idx=368, true=7, pred=9
+Convergence steps: 6
+FAIL: idx=370, true=7, pred=1
+Convergence steps: 7
+FAIL: idx=378, true=7, pred=9
+Convergence steps: 7
+FAIL: idx=379, true=7, pred=4
+Convergence steps: 10
+FAIL: idx=383, true=7, pred=9
+Convergence steps: 7
+FAIL: idx=384, true=7, pred=8
+Convergence steps: 5
+FAIL: idx=385, true=7, pred=4
+Convergence steps: 9
+FAIL: idx=386, true=7, pred=9
+Convergence steps: 6
+FAIL: idx=389, true=7, pred=9
+Convergence steps: 8
+FAIL: idx=395, true=7, pred=9
+Convergence steps: 6
+FAIL: idx=396, true=7, pred=9
+Convergence steps: 8
+FAIL: idx=398, true=7, pred=9
+Convergence steps: 5
+FAIL: idx=400, true=8, pred=6
+Convergence steps: 6
+FAIL: idx=401, true=8, pred=9
+Convergence steps: 9
+FAIL: idx=402, true=8, pred=5
+Convergence steps: 4
+FAIL: idx=403, true=8, pred=1
+Convergence steps: 15
+FAIL: idx=404, true=8, pred=1
+Convergence steps: 14
+FAIL: idx=406, true=8, pred=1
+Convergence steps: 15
+FAIL: idx=407, true=8, pred=1
+Convergence steps: 11
+FAIL: idx=408, true=8, pred=1
+Convergence steps: 14
+FAIL: idx=409, true=8, pred=5
+Convergence steps: 6
+FAIL: idx=410, true=8, pred=9
+Convergence steps: 9
+FAIL: idx=411, true=8, pred=3
+Convergence steps: 7
+FAIL: idx=412, true=8, pred=3
+Convergence steps: 6
+FAIL: idx=414, true=8, pred=0
+Convergence steps: 5
+FAIL: idx=419, true=8, pred=3
+Convergence steps: 7
+FAIL: idx=421, true=8, pred=1
+Convergence steps: 14
+FAIL: idx=422, true=8, pred=2
+Convergence steps: 6
+FAIL: idx=426, true=8, pred=5
+Convergence steps: 5
+FAIL: idx=428, true=8, pred=1
+Convergence steps: 17
+FAIL: idx=430, true=8, pred=5
+Convergence steps: 6
+FAIL: idx=437, true=8, pred=1
+Convergence steps: 16
+FAIL: idx=438, true=8, pred=5
+Convergence steps: 6
+FAIL: idx=439, true=8, pred=3
+Convergence steps: 6
+FAIL: idx=443, true=8, pred=5
+Convergence steps: 7
+FAIL: idx=445, true=8, pred=1
+Convergence steps: 11
+FAIL: idx=447, true=8, pred=1
+Convergence steps: 16
+FAIL: idx=451, true=9, pred=7
+Convergence steps: 7
+FAIL: idx=455, true=9, pred=1
+Convergence steps: 13
+FAIL: idx=458, true=9, pred=1
+Convergence steps: 12
+FAIL: idx=465, true=9, pred=4
+Convergence steps: 8
+FAIL: idx=466, true=9, pred=4
+Convergence steps: 6
+FAIL: idx=467, true=9, pred=7
+Convergence steps: 9
+FAIL: idx=468, true=9, pred=4
+Convergence steps: 7
+FAIL: idx=469, true=9, pred=4
+Convergence steps: 6
+FAIL: idx=470, true=9, pred=1
+Convergence steps: 14
+FAIL: idx=472, true=9, pred=7
+Convergence steps: 7
+FAIL: idx=475, true=9, pred=4
+Convergence steps: 12
+FAIL: idx=476, true=9, pred=4
+Convergence steps: 9
+FAIL: idx=477, true=9, pred=7
+Convergence steps: 11
+FAIL: idx=479, true=9, pred=7
+Convergence steps: 7
+FAIL: idx=481, true=9, pred=4
+Convergence steps: 9
+FAIL: idx=482, true=9, pred=7
+Convergence steps: 11
+FAIL: idx=484, true=9, pred=4
+Convergence steps: 9
+FAIL: idx=488, true=9, pred=7
+Convergence steps: 10
+FAIL: idx=489, true=9, pred=7
+Convergence steps: 9
+FAIL: idx=491, true=9, pred=7
+Convergence steps: 10
+FAIL: idx=493, true=9, pred=0
+Convergence steps: 7
+FAIL: idx=494, true=9, pred=7
+Convergence steps: 12
+FAIL: idx=496, true=9, pred=4
+Convergence steps: 10
+FAIL: idx=498, true=9, pred=3
+Convergence steps: 4
+First 10 correct cases: [(0, 0, 0), (1, 0, 0), (2, 0, 0), (4, 0, 0), (5, 0, 0), (7, 0, 0), (8, 0, 0), (9, 0, 0), (10, 0, 0), (11, 0, 0)]
+First 10 failure cases: [(3, 0, 5), (6, 0, 7), (12, 0, 5), (18, 0, 5), (21, 0, 8), (24, 0, 6), (25, 0, 6), (34, 0, 5), (36, 0, 5), (37, 0, 2)]
+
+Digit accuracy: 0.56
+Pixel overlap: 0.8961581632653062
+
+Confusion matrix:
+ [[34  1  1  0  0  9  2  1  2  0]
+ [ 0 45  0  0  1  1  0  0  1  2]
+ [ 0 11 19  5  2  3  2  2  3  3]
+ [ 0  5  2 29  2  4  1  3  1  3]
+ [ 0  5  0  0 28  1  5  4  0  7]
+ [ 1  5  1 10  5 18  3  1  4  2]
+ [ 1  7  0  0  5  7 26  0  3  1]
+ [ 0  6  1  0  3  0  0 30  1  9]
+ [ 1 10  1  4  0  6  1  0 25  2]
+ [ 1  3  0  1  9  0  0 10  0 26]]

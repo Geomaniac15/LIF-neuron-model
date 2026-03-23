@@ -81,12 +81,12 @@ def analyse_trajectory(trajectory, true_pattern, patterns):
 
 
 def plot_convergence(sims_to_true, sims_to_all):
-    plt.plot(sims_to_true, label="to true")
-    plt.plot(sims_to_all, label="to memory")
-    plt.xlabel("iteration")
-    plt.ylabel("similarity")
+    plt.plot(sims_to_true, label='to true')
+    plt.plot(sims_to_all, label='to memory')
+    plt.xlabel('iteration')
+    plt.ylabel('similarity')
     plt.legend()
-    plt.title("Convergence")
+    plt.title('Convergence')
     plt.show()
 
 
@@ -119,7 +119,9 @@ def make_prototypes(X_binary, y, digit, n_prototypes=5, samples_per_proto=10):
 def evaluate(X_test, y_test, patterns, pattern_labels, beta=4.0, noise_level=0.3, k=20):
     preds = []
     pixel_overlaps = []
-    failures = []
+
+    failure_cases = []
+    correct_cases = []
 
     for i, (x, true_label) in enumerate(zip(X_test, y_test)):
         corrupted = corrupt_pattern(x, noise_level)
@@ -133,11 +135,13 @@ def evaluate(X_test, y_test, patterns, pattern_labels, beta=4.0, noise_level=0.3
         overlap = np.mean(retrieved == x)
         pixel_overlaps.append(overlap)
 
-        # DEBUG FAILURES
+        # DEBUG CASES
+        if pred == true_label:
+            correct_cases.append((int(i), int(true_label), int(pred)))
         if pred != true_label:
-            failures.append(i)
-            print(f"FAIL: idx={i}, true={true_label}, pred={pred}")
-            print("Convergence steps:", convergence_steps(trajectory))
+            failure_cases.append((int(i), int(true_label), int(pred)))
+            print(f'FAIL: idx={i}, true={true_label}, pred={pred}')
+            print('Convergence steps:', convergence_steps(trajectory))
 
     preds = np.array(preds)
 
@@ -145,7 +149,7 @@ def evaluate(X_test, y_test, patterns, pattern_labels, beta=4.0, noise_level=0.3
     pixel_accuracy = np.mean(pixel_overlaps)
     cm = confusion_matrix(y_test, preds)
 
-    return digit_accuracy, pixel_accuracy, cm, failures
+    return digit_accuracy, pixel_accuracy, cm, failure_cases, correct_cases
 
 
 def noise_sweep(X_test, y_test, patterns, pattern_labels):
@@ -155,12 +159,12 @@ def noise_sweep(X_test, y_test, patterns, pattern_labels):
     for nl in noise_levels:
         acc, _, _ = evaluate(X_test, y_test, patterns, pattern_labels, noise_level=nl)
         accs.append(acc)
-        print(f"Noise {nl}: {acc}")
+        print(f'Noise {nl}: {acc}')
 
     plt.plot(noise_levels, accs, marker='o')
-    plt.xlabel("noise")
-    plt.ylabel("accuracy")
-    plt.title("Robustness")
+    plt.xlabel('noise')
+    plt.ylabel('accuracy')
+    plt.title('Robustness')
     plt.show()
 
 
@@ -177,13 +181,13 @@ def show_trajectory(x, patterns, beta=4.0, noise_level=0.3, k=20):
     fig, axes = plt.subplots(1, steps+1, figsize=(2*(steps+1),2))
 
     axes[0].imshow(x.reshape(28,28), cmap='gray')
-    axes[0].set_title("original")
-    axes[0].axis("off")
+    axes[0].set_title('original')
+    axes[0].axis('off')
 
     for i, state in enumerate(trajectory):
         axes[i+1].imshow(np.sign(state).reshape(28,28), cmap='gray')
-        axes[i+1].set_title(f"step {i}")
-        axes[i+1].axis("off")
+        axes[i+1].set_title(f'step {i}')
+        axes[i+1].axis('off')
     
     pred = nearest_label(np.sign(final_state), patterns, pattern_labels)
     print('Predicted:', pred)
@@ -193,7 +197,7 @@ def show_trajectory(x, patterns, beta=4.0, noise_level=0.3, k=20):
 
 # MAIN
 
-print("Loading MNIST...")
+print('Loading MNIST...')
 
 mnist = fetch_openml('mnist_784', version=1, as_frame=False)
 X = mnist.data
@@ -213,7 +217,7 @@ pattern_labels = np.hstack([
     [d]*n_prototypes for d in range(10)
 ])
 
-print("Stored memories:", len(patterns))
+print('Stored memories:', len(patterns))
 
 test_per_digit = 50
 
@@ -237,7 +241,7 @@ if MODE == 'evaluate':
     # How good is it?
     # accuracy, confusion matrix, overall behaviour
 
-    acc, pix, cm, failures = evaluate(
+    acc, pix, cm, failure_cases, correct_cases = evaluate(
         X_test,
         y_test,
         patterns,
@@ -245,9 +249,12 @@ if MODE == 'evaluate':
         noise_level=0.3
     )
 
-    print("\nDigit accuracy:", acc)
-    print("Pixel overlap:", pix)
-    print("\nConfusion matrix:\n", cm)
+    print('First 10 correct cases:', correct_cases[:10])
+    print('First 10 failure cases:', failure_cases[:10])
+
+    print('\nDigit accuracy:', acc)
+    print('Pixel overlap:', pix)
+    print('\nConfusion matrix:\n', cm)
 
 elif MODE == 'noise':
     # How does it break?
@@ -259,6 +266,6 @@ elif MODE == 'trajectory':
     # What is it doing internally?
     # convergence behaviour, attractor dynamics, failure analysis
 
-    show_trajectory(X_test[317], patterns)
+    show_trajectory(X_test[165], patterns)
 
 sys.stdout.close()

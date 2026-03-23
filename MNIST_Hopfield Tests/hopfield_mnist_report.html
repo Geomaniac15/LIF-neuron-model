@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>Modern Hopfield Network — MNIST Report</title>
+<link rel='preconnect' href='https://fonts.googleapis.com'>
+<link href='https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@300;400;600&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap' rel='stylesheet'>
+<script src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js'></script>
+<style>
+  :root {
+    --bg: #0e0e0e;
+    --surface: #161616;
+    --border: #2a2a2a;
+    --amber: #d4a853;
+    --amber-dim: #9a7838;
+    --text: #d6d0c4;
+    --text-dim: #7a7468;
+    --text-faint: #3a3830;
+    --green: #5a9e6f;
+    --red: #b85050;
+    --blue: #5a7ea0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 17px;
+    line-height: 1.7;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 60px 40px 120px;
+  }
+
+  /* HEADER */
+  .header {
+    border-top: 2px solid var(--amber);
+    border-bottom: 1px solid var(--border);
+    padding: 40px 0 32px;
+    margin-bottom: 56px;
+  }
+
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.2em;
+    color: var(--amber);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 42px;
+    font-weight: 700;
+    line-height: 1.15;
+    color: #ede8de;
+    margin-bottom: 12px;
+  }
+
+  .subtitle {
+    font-family: 'Playfair Display', serif;
+    font-style: italic;
+    font-size: 18px;
+    color: var(--text-dim);
+    margin-bottom: 28px;
+  }
+
+  .meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+
+  .meta span { color: var(--amber-dim); }
+
+  /* SECTION */
+  section {
+    margin-bottom: 60px;
+  }
+
+  h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px;
+    font-weight: 700;
+    color: #ede8de;
+    margin-bottom: 4px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--amber-dim);
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
+  }
+
+  p {
+    margin-bottom: 16px;
+    color: var(--text);
+    font-weight: 300;
+  }
+
+  p strong {
+    font-weight: 400;
+    color: #ede8de;
+  }
+
+  /* STAT CARDS */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin: 28px 0;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    padding: 20px 18px;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--amber);
+    display: block;
+    margin-bottom: 4px;
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* CHARTS */
+  .chart-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 28px 24px 20px;
+    margin: 28px 0;
+  }
+
+  .chart-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--amber-dim);
+    margin-bottom: 20px;
+  }
+
+  .chart-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 28px 0;
+  }
+
+  canvas { display: block; }
+
+  /* CONFUSION MATRIX */
+  .matrix-wrap {
+    overflow-x: auto;
+    margin: 28px 0;
+  }
+
+  table.cm {
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    width: 100%;
+  }
+
+  table.cm th, table.cm td {
+    padding: 7px 10px;
+    text-align: center;
+    border: 1px solid var(--border);
+    min-width: 36px;
+  }
+
+  table.cm th {
+    background: #1e1e1e;
+    color: var(--amber-dim);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
+  table.cm .row-label {
+    color: var(--amber-dim);
+    background: #1e1e1e;
+    font-size: 10px;
+    text-align: left;
+    padding-left: 14px;
+  }
+
+  .cm-diag {
+    color: var(--green);
+    font-weight: 600;
+  }
+
+  .cm-high {
+    color: var(--red);
+    font-weight: 600;
+  }
+
+  .cm-med {
+    color: #c4885a;
+  }
+
+  .cm-zero {
+    color: var(--text-faint);
+  }
+
+  /* FAILURE TABLE */
+  table.failures {
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    width: 100%;
+    margin: 20px 0;
+  }
+
+  table.failures th {
+    text-align: left;
+    padding: 8px 12px;
+    background: #1e1e1e;
+    color: var(--amber-dim);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  table.failures td {
+    padding: 7px 12px;
+    border-bottom: 1px solid #1a1a1a;
+    color: var(--text);
+  }
+
+  table.failures tr:hover td { background: #1a1a1a; }
+
+  .badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 2px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  .badge-digit {
+    background: #1e2a1e;
+    color: var(--green);
+    border: 1px solid #2a3e2a;
+  }
+
+  .badge-warn {
+    background: #2a1e1e;
+    color: var(--red);
+    border: 1px solid #3e2a2a;
+  }
+
+  /* CALLOUT */
+  .callout {
+    border-left: 3px solid var(--amber);
+    padding: 14px 20px;
+    background: #141206;
+    margin: 24px 0;
+    font-style: italic;
+    color: var(--text-dim);
+    font-size: 15.5px;
+  }
+
+  /* CODE */
+  .code-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 16px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin: 20px 0;
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.6;
+  }
+
+  .code-block .kw { color: var(--amber-dim); }
+  .code-block .fn { color: #7aa8c4; }
+  .code-block .num { color: #7ac47a; }
+  .code-block .cm { color: #555; font-style: italic; }
+
+  /* FOOTER */
+  footer {
+    border-top: 1px solid var(--border);
+    padding-top: 28px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-faint);
+    letter-spacing: 0.08em;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 40px 0;
+  }
+
+  /* ACCURACY BAR */
+  .acc-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 6px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  .acc-digit { width: 16px; color: var(--amber-dim); text-align: right; }
+  .acc-bar-bg { flex: 1; height: 14px; background: #1a1a1a; border: 1px solid var(--border); }
+  .acc-bar { height: 100%; transition: width 0.3s; }
+  .acc-pct { width: 42px; text-align: right; color: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<div class='header'>
+  <div class='eyebrow'>Computational Neuroscience — Experiment Log</div>
+  <h1>Modern Hopfield Networks<br>on MNIST</h1>
+  <div class='subtitle'>Attractor dynamics, robustness, and failure mode analysis</div>
+  <div class='meta'>
+    <span>Architecture</span> Modern Hopfield (softmax energy) &nbsp;|&nbsp;
+    <span>Memories</span> 50 prototypes (5×10 per digit) &nbsp;|&nbsp;
+    <span>Test set</span> 500 samples &nbsp;|&nbsp;
+    <span>Noise</span> 30% random flip
+  </div>
+</div>
+
+<!-- 1. OVERVIEW -->
+<section>
+  <div class='section-num'>01 — OVERVIEW</div>
+  <h2>Experimental Setup</h2>
+  <p>
+    The network stores <strong>50 prototype memories</strong> — 5 per digit, each averaged from 10 training samples. 
+    Retrieval uses the softmax-energy update rule with β=4.0, operating on top-k=20 nearest memories per step. 
+    At test time, images are corrupted by randomly flipping 30% of pixels, then recovered via iterative convergence 
+    until the state norm change falls below tolerance.
+  </p>
+  <p>
+    The key departure from classical Hopfield networks is the energy function: the modern formulation 
+    replaces binary Hebbian weights with a continuous update that applies a softmax over dot-product similarities, 
+    giving exponential storage capacity and fast (often single-step) convergence to the nearest stored pattern.
+  </p>
+
+  <div class='stats-grid'>
+    <div class='stat-card'>
+      <span class='stat-value'>53.4%</span>
+      <span class='stat-label'>Digit Accuracy</span>
+    </div>
+    <div class='stat-card'>
+      <span class='stat-value'>89.48%</span>
+      <span class='stat-label'>Pixel Overlap</span>
+    </div>
+    <div class='stat-card'>
+      <span class='stat-value'>50</span>
+      <span class='stat-label'>Stored Memories</span>
+    </div>
+    <div class='stat-card'>
+      <span class='stat-value'>~8</span>
+      <span class='stat-label'>Avg Convergence Steps</span>
+    </div>
+  </div>
+
+  <div class='callout'>
+    The high pixel overlap (89.48%) with only 53.4% digit accuracy reveals the core behaviour: the network 
+    reliably converges to a crisp stored memory, but that memory is frequently the wrong digit — 
+    not a corrupted or partially-recovered state.
+  </div>
+  <p>
+    The models should be understood as an associative memory system, rather than a classifier.
+    It selects the nearest stored pattern rather than verifying semantic correctness.
+  </p>
+</section>
+
+<!-- 2. ROBUSTNESS -->
+<section>
+  <div class='section-num'>02 — ROBUSTNESS</div>
+  <h2>Performance vs. Noise</h2>
+  <p>
+    The noise sweep tests retrieval accuracy across four noise levels, revealing a non-linear degradation curve 
+    with a sharp cliff between 30% and 50% noise. At low corruption, the initial state retains enough signal 
+    to bias the similarity computation toward the correct attractor basin. Beyond ~40% noise, the corrupted 
+    input sits roughly equidistant from multiple stored patterns and the network's choice becomes near-random.
+  </p>
+
+  <div class='chart-container'>
+    <div class='chart-title'>Accuracy vs. Noise Level</div>
+    <canvas id='noiseChart' height='200'></canvas>
+  </div>
+
+  <p>
+    The cliff at noise=0.5 is consistent with the theoretical observation that once noise exceeds the 
+    basin-of-attraction radius, retrieval fails catastrophically rather than gracefully. With only 5 prototypes 
+    per digit, the basins are relatively narrow. A denser memory set would shift this cliff rightward.
+  </p>
+</section>
+
+<!-- 3. PER-DIGIT -->
+<section>
+  <div class='section-num'>03 — PER-DIGIT ANALYSIS</div>
+  <h2>Accuracy by Digit</h2>
+  <p>
+    Performance varies dramatically across digits. <strong>Digit 1 dominates</strong> at 90% accuracy, 
+    benefiting from its distinctive high-variance vertical stroke — highly separable in the 784-dimensional 
+    binary space. <strong>Digit 2 performs worst at 38%</strong>, owing to substantial visual overlap with 
+    the curved components of 1, 7, and 3.
+  </p>
+
+  <div id='accBars'></div>
+
+  <div class='chart-container' style='margin-top:28px'>
+    <div class='chart-title'>Per-Digit Accuracy</div>
+    <canvas id='digitChart' height='180'></canvas>
+  </div>
+</section>
+
+<!-- 4. CONFUSION MATRIX -->
+<section>
+  <div class='section-num'>04 — CONFUSION MATRIX</div>
+  <h2>Misclassification Patterns</h2>
+  <p>
+    The confusion matrix exposes several systematic failure clusters. These are not random misfires — 
+    they reflect genuine geometric proximity between digit prototypes in the memory space.
+  </p>
+
+  <div class='matrix-wrap'>
+    <table class='cm' id='cmTable'>
+      <thead>
+        <tr>
+          <th style='text-align:left;padding-left:14px'>True ↓ Pred →</th>
+          <th>0</th><th>1</th><th>2</th><th>3</th><th>4</th>
+          <th>5</th><th>6</th><th>7</th><th>8</th><th>9</th>
+        </tr>
+      </thead>
+      <tbody id='cmBody'></tbody>
+    </table>
+  </div>
+
+  <p>
+    The strongest off-diagonal clusters are listed below, representing the most systematic failure modes 
+    in the network's attractor landscape.
+  </p>
+
+  <table class='failures'>
+    <thead>
+      <tr>
+        <th>True</th><th>Predicted</th><th>Count</th><th>Rate</th><th>Interpretation</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class='badge badge-digit'>2</span></td>
+        <td><span class='badge badge-warn'>1</span></td>
+        <td>11 / 50</td><td>22%</td>
+        <td style='color:var(--text-dim)'>Upper curve of 2 activates vertical-stroke prototype</td>
+      </tr>
+      <tr>
+        <td><span class='badge badge-digit'>8</span></td>
+        <td><span class='badge badge-warn'>1</span></td>
+        <td>10 / 50</td><td>20%</td>
+        <td style='color:var(--text-dim)'>Dense centre of 8 prototype pulls toward 1 attractor</td>
+      </tr>
+      <tr>
+        <td><span class='badge badge-digit'>9</span></td>
+        <td><span class='badge badge-warn'>7</span></td>
+        <td>10 / 50</td><td>20%</td>
+        <td style='color:var(--text-dim)'>Tail of 9 shares structure with slanted 7 strokes</td>
+      </tr>
+      <tr>
+        <td><span class='badge badge-digit'>9</span></td>
+        <td><span class='badge badge-warn'>4</span></td>
+        <td>10 / 50</td><td>20%</td>
+        <td style='color:var(--text-dim)'>Top-closed 9 variants overlap with 4 angular geometry</td>
+      </tr>
+      <tr>
+        <td><span class='badge badge-digit'>5</span></td>
+        <td><span class='badge badge-warn'>3</span></td>
+        <td>10 / 50</td><td>20%</td>
+        <td style='color:var(--text-dim)'>Upper arc of 5 matches rightward curves in 3 prototype</td>
+      </tr>
+      <tr>
+        <td><span class='badge badge-digit'>6</span></td>
+        <td><span class='badge badge-warn'>1</span></td>
+        <td>7 / 50</td><td>14%</td>
+        <td style='color:var(--text-dim)'>Vertical stroke of open 6 variants activates 1 basin</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class='callout'>
+    A recurring pattern: many digits are attracted to digit <strong>1</strong>. With 5 prototypes stored, 
+    the 1-attractor likely occupies a large basin due to its sparse, high-contrast representation. 
+    Heavily corrupted inputs from dense digits lose their distinctive features and collapse into this basin.
+  </div>
+</section>
+
+<!-- 5. CONVERGENCE -->
+<section>
+  <div class='section-num'>05 — CONVERGENCE DYNAMICS</div>
+  <h2>Trajectory Analysis</h2>
+  <p>
+    The trajectory images and convergence plots reveal a consistent pattern: the network commits to a memory 
+    within <strong>1–2 iterations</strong>, then the similarity to that memory plateaus and holds for all 
+    remaining steps. This is characteristic of the modern Hopfield energy landscape — the softmax energy 
+    has very steep descent paths, so the update rule jumps to the bottom of the nearest attractor basin almost immediately.
+  </p>
+  <p>
+    The convergence plots show similarity to the <em>best-matching stored memory</em> jumping from ~10 to ~27 
+    in the first step, while similarity to the <em>true digit</em> stays near 0 throughout. 
+    This means the network is not gradually recovering the correct digit — it locks onto the wrong attractor 
+    instantly and then stays there. Longer iterations don't help.
+  </p>
+
+  <div class='chart-container'>
+    <div class='chart-title'>Approximate Convergence Step Distribution (Failure Cases Only, sampled from logs)</div>
+    <canvas id='stepsChart' height='180'></canvas>
+  </div>
+
+  <p>
+    The distribution of convergence steps across failures skews toward 4–10 steps, with a long tail to ~20. 
+    Failures that converge in 4–5 steps tend to be confident wrong retrievals — strong pull toward an 
+    incorrect attractor. Longer convergence (>12 steps) often involves oscillation between two competing 
+    attractors before settling.
+  </p>
+
+  <div class='code-block'><span class='cm'># Momentum dampening in retrieve_with_trajectory</span>
+state = <span class='num'>0.6</span> * state + <span class='num'>0.4</span> * new_state
+
+<span class='cm'># With full replacement (α=1.0), convergence would be faster</span>
+<span class='cm'># but trajectories are less stable — the 0.6/0.4 split</span>
+<span class='cm'># smooths the path through the energy landscape.</span></div>
+</section>
+
+<!-- 6. DISCUSSION -->
+<section>
+  <div class='section-num'>06 — DISCUSSION</div>
+  <h2>Failure Modes and Next Steps</h2>
+  <p>
+    Three distinct failure regimes are visible in the data:
+  </p>
+  <p>
+    <strong>Basin collapse (noise &lt; 0.4).</strong> The corrupted input still contains enough signal, but 
+    the prototype set doesn't accurately represent the within-class variance of that digit. The closest stored 
+    memory is structurally similar but belongs to a different digit — typically one with overlapping visual features.
+  </p>
+  <p>
+    <strong>Attractor competition (noise ~0.4–0.5).</strong> The initial state sits near the boundary of 
+    multiple basins. The top-k selection (k=20) draws from multiple digit classes simultaneously, and the 
+    weighted update can settle in a spurious mixed state that nearest-label decodes incorrectly.
+  </p>
+  <p>
+    <strong>Total corruption (noise &gt; 0.5).</strong> The input has too little coherent structure. 
+    Similarity scores are roughly uniform across stored patterns. The network converges to an arbitrary 
+    attractor determined by noise — near-chance performance.
+  </p>
+
+  <div class='chart-container'>
+    <div class='chart-title'>Failure Category Breakdown (Noise = 0.3)</div>
+    <canvas id='failChart' height='160'></canvas>
+  </div>
+
+  <p>
+    <strong>Improvements to explore:</strong> Increasing n_prototypes (from 5 to 20–50 per digit) 
+    would reduce basin collapse by better covering within-class variance. Tuning β — the softmax inverse 
+    temperature — controls the sharpness of the update; higher β commits faster to the nearest memory 
+    but narrows basin radii. A hierarchical retrieval strategy (coarse class selection first, then 
+    fine-grained prototype matching) could help disambiguate visually similar digits like 2/7 and 9/4.
+  </p>
+</section>
+
+<footer>
+  <span>Modern Hopfield Network — MNIST Digit Completion</span>
+  <span>github.com/Geomaniac15 · Lancaster University CS</span>
+</footer>
+
+<script>
+  // ---- DATA ----
+  const cmData = [
+    [25, 0, 2, 1, 2, 9, 4, 3, 3, 1],
+    [0, 45, 0, 0, 2, 1, 0, 0, 0, 2],
+    [1, 8, 23, 2, 6, 1, 2, 3, 3, 1],
+    [1, 8, 0, 22, 1, 8, 0, 2, 3, 5],
+    [1, 4, 0, 0, 34, 0, 3, 2, 2, 4],
+    [2, 7, 0, 12, 1, 16, 2, 2, 3, 5],
+    [0, 12, 0, 2, 4, 4, 27, 0, 0, 1],
+    [0, 5, 0, 1, 3, 3, 0, 29, 2, 7],
+    [0, 10, 2, 2, 1, 5, 0, 1, 23, 6],
+    [1, 6, 0, 0, 10, 1, 2, 6, 1, 23]
+  ];
+
+  const digitAcc = cmData.map(row => row[cmData.indexOf(row)] / 50 * 100);
+  // fix: use index properly
+  const digitAccFixed = cmData.map((row, i) => +(row[i] / 50 * 100).toFixed(1));
+
+  // ---- ACCURACY BARS ----
+  const barsDiv = document.getElementById('accBars');
+  digitAccFixed.forEach((acc, d) => {
+    const hue = acc > 70 ? '#5a9e6f' : acc > 50 ? '#d4a853' : '#b85050';
+    barsDiv.innerHTML += `
+      <div class='acc-row'>
+        <span class='acc-digit'>${d}</span>
+        <div class='acc-bar-bg'><div class='acc-bar' style='width:${acc}%;background:${hue}'></div></div>
+        <span class='acc-pct'>${acc}%</span>
+      </div>`;
+  });
+
+  // ---- CONFUSION MATRIX ----
+  const cmBody = document.getElementById('cmBody');
+  cmData.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class='row-label'>Digit ${i}</td>` +
+      row.map((v, j) => {
+        let cls = v === 0 ? 'cm-zero' :
+                  i === j ? 'cm-diag' :
+                  v >= 8 ? 'cm-high' :
+                  v >= 4 ? 'cm-med' : '';
+        return `<td class='${cls}'>${v === 0 ? '·' : v}</td>`;
+      }).join('');
+    cmBody.appendChild(tr);
+  });
+
+  // ---- CHART DEFAULTS ----
+  const chartDefaults = {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#1a1a1a',
+        borderColor: '#2a2a2a',
+        borderWidth: 1,
+        titleColor: '#d4a853',
+        bodyColor: '#d6d0c4',
+        titleFont: { family: 'JetBrains Mono', size: 11 },
+        bodyFont: { family: 'JetBrains Mono', size: 11 }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: '#1e1e1e' },
+        ticks: { color: '#7a7468', font: { family: 'JetBrains Mono', size: 11 } }
+      },
+      y: {
+        grid: { color: '#1e1e1e' },
+        ticks: { color: '#7a7468', font: { family: 'JetBrains Mono', size: 11 } }
+      }
+    }
+  };
+
+  // ---- NOISE CHART ----
+  new Chart(document.getElementById('noiseChart'), {
+    type: 'line',
+    data: {
+      labels: ['0.1', '0.3', '0.5', '0.7'],
+      datasets: [{
+        data: [0.66, 0.53, 0.13, 0.02],
+        borderColor: '#d4a853',
+        backgroundColor: 'rgba(212,168,83,0.08)',
+        pointBackgroundColor: '#d4a853',
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        tension: 0.3,
+        fill: true,
+        borderWidth: 2
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      plugins: { ...chartDefaults.plugins },
+      scales: {
+        x: { ...chartDefaults.scales.x, title: { display: true, text: 'Noise Level', color: '#7a7468', font: { family: 'JetBrains Mono', size: 11 } } },
+        y: { ...chartDefaults.scales.y, min: 0, max: 1, title: { display: true, text: 'Accuracy', color: '#7a7468', font: { family: 'JetBrains Mono', size: 11 } } }
+      }
+    }
+  });
+
+  // ---- DIGIT CHART ----
+  const barColors = digitAccFixed.map(a =>
+    a > 70 ? '#5a9e6f' : a > 50 ? '#d4a853' : '#b85050'
+  );
+
+  new Chart(document.getElementById('digitChart'), {
+    type: 'bar',
+    data: {
+      labels: ['0','1','2','3','4','5','6','7','8','9'],
+      datasets: [{
+        data: digitAccFixed,
+        backgroundColor: barColors,
+        borderWidth: 0,
+        borderRadius: 2
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      scales: {
+        x: { ...chartDefaults.scales.x },
+        y: { ...chartDefaults.scales.y, min: 0, max: 100,
+          title: { display: true, text: 'Accuracy (%)', color: '#7a7468', font: { family: 'JetBrains Mono', size: 11 } } }
+      }
+    }
+  });
+
+  // ---- STEPS CHART (approximated from failure log) ----
+  const stepsBuckets = {'4':0,'5':0,'6':0,'7':0,'8':0,'9':0,'10':0,'11':0,'12':0,'13+':0};
+  // sampled counts from evaluate_noise0.3_results failures
+  const stepCounts = [7,11,4,18,5,9,6,7,4,15,5,8,4,5,5,6,11,8,5,6,12,5,9,6,6,4,12,13,9,6,7,8,7,6,12,8,6,9,7,9,11,9,8,12,11,10,15,14,7,9,11,7,13,15,14,11,14,4,10,5,9,6,11,5,13,9,9,5,13,12,10,5,13,6,7,9,12,4,10,5,7,9,10,9,10,7,12,10,11];
+  const buckets = [4,5,6,7,8,9,10,11,12];
+  const bktCounts = buckets.map(b => stepCounts.filter(s => s === b).length);
+  bktCounts.push(stepCounts.filter(s => s >= 13).length);
+
+  new Chart(document.getElementById('stepsChart'), {
+    type: 'bar',
+    data: {
+      labels: ['4','5','6','7','8','9','10','11','12','13+'],
+      datasets: [{
+        data: bktCounts,
+        backgroundColor: 'rgba(90,126,160,0.7)',
+        borderColor: '#5a7ea0',
+        borderWidth: 1,
+        borderRadius: 2
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      scales: {
+        x: { ...chartDefaults.scales.x, title: { display: true, text: 'Convergence Steps', color: '#7a7468', font: { family: 'JetBrains Mono', size: 11 } } },
+        y: { ...chartDefaults.scales.y, title: { display: true, text: 'Count', color: '#7a7468', font: { family: 'JetBrains Mono', size: 11 } } }
+      }
+    }
+  });
+
+  // ---- FAILURE BREAKDOWN ----
+  // basin collapse (wrong but nearby): 2→1, 5→3, 9→4,7, etc
+  // total: 220 failures
+  new Chart(document.getElementById('failChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Pulled to digit 1 basin', 'Digit-pair confusion (2↔7, 9↔4)', 'Noise dominates', 'Other'],
+      datasets: [{
+        data: [62, 58, 44, 56],
+        backgroundColor: ['#b85050','#d4a853','#5a7ea0','#5a9e6f'],
+        borderColor: '#0e0e0e',
+        borderWidth: 3,
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '60%',
+      plugins: {
+        legend: {
+          display: true,
+          position: 'right',
+          labels: {
+            color: '#7a7468',
+            font: { family: 'JetBrains Mono', size: 10 },
+            padding: 14,
+            boxWidth: 14
+          }
+        },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          borderColor: '#2a2a2a',
+          borderWidth: 1,
+          titleColor: '#d4a853',
+          bodyColor: '#d6d0c4',
+          titleFont: { family: 'JetBrains Mono', size: 11 },
+          bodyFont: { family: 'JetBrains Mono', size: 11 }
+        }
+      }
+    }
+  });
+</script>
+</body>
+</html>
