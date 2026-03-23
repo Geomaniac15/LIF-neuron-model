@@ -11,17 +11,14 @@ console_output_file = 'mnist_console_output.txt'
 sys.stdout = open(console_output_file, 'w')
 
 
-# softmax
+# CORE FUNCTIONS
 
 def softmax(x, beta=1.0):
     e = np.exp(beta * (x - np.max(x)))
     return e / e.sum()
 
 
-# hopfield update (top-k attention)
-
 def hopfield_update(state, patterns, beta=1.0, k=20):
-
     similarities = (patterns @ state) / np.sqrt(state.shape[0])
 
     top_idx = np.argsort(similarities)[-k:]
@@ -29,85 +26,106 @@ def hopfield_update(state, patterns, beta=1.0, k=20):
     top_sims = similarities[top_idx]
 
     weights = softmax(top_sims, beta)
-
     return top_patterns.T @ weights
 
 
-# retrieval dynamics
-
 def retrieve_with_trajectory(corrupted, patterns, beta=4.0, max_iters=40, tol=1e-6, k=20):
-
     state = corrupted.astype(float).copy()
     trajectory = [state.copy()]
 
     for _ in range(max_iters):
-
         new_state = hopfield_update(state, patterns, beta=beta, k=k)
-
         trajectory.append(new_state.copy())
 
         if np.linalg.norm(new_state - state) < tol:
             break
 
-        state = 0.6*state + 0.4*new_state
+        state = 0.6 * state + 0.4 * new_state
 
     return state, trajectory
 
 
-# noise model
+# CORRUPTION MODELS
 
 def corrupt_pattern(x, noise_level=0.3):
-
     corrupted = x.copy()
-
     mask = np.random.rand(x.shape[0]) < noise_level
-
     corrupted[mask] *= -1
-
     return corrupted
 
 
-# nearest stored label
+def corrupt_block(x, block_size=10):
+    img = x.reshape(28, 28).copy()
+    i = np.random.randint(0, 28 - block_size)
+    j = np.random.randint(0, 28 - block_size)
+    img[i:i+block_size, j:j+block_size] = -1
+    return img.flatten()
+
+
+# ANALYSIS FUNCTIONS
+
+def analyse_trajectory(trajectory, true_pattern, patterns):
+    sims_to_true = []
+    sims_to_all = []
+
+    for state in trajectory:
+        state_bin = np.sign(state)
+
+        sim_true = np.mean(state_bin == true_pattern)
+        sims_to_true.append(sim_true)
+
+        sims = (patterns @ state_bin) / np.sqrt(state.shape[0])
+        sims_to_all.append(np.max(sims))
+
+    return sims_to_true, sims_to_all
+
+
+def plot_convergence(sims_to_true, sims_to_all):
+    plt.plot(sims_to_true, label="to true")
+    plt.plot(sims_to_all, label="to memory")
+    plt.xlabel("iteration")
+    plt.ylabel("similarity")
+    plt.legend()
+    plt.title("Convergence")
+    plt.show()
+
+
+def convergence_steps(trajectory, tol=1e-3):
+    for i in range(1, len(trajectory)):
+        if np.linalg.norm(trajectory[i] - trajectory[i-1]) < tol:
+            return i
+    return len(trajectory)
+
+
+# LABELING
 
 def nearest_label(x, patterns, labels):
-
     similarities = (patterns @ x) / np.sqrt(x.shape[0])
-
-    idx = np.argmax(similarities)
-
-    return labels[idx]
+    return labels[np.argmax(similarities)]
 
 
-# prototype creation
+# PROTOTYPES
 
 def make_prototypes(X_binary, y, digit, n_prototypes=5, samples_per_proto=10):
-
     digit_imgs = X_binary[y == digit][:n_prototypes * samples_per_proto]
-
     groups = digit_imgs.reshape(n_prototypes, samples_per_proto, -1)
-
     prototypes = np.sign(groups.mean(axis=1))
-
     prototypes[prototypes == 0] = 1
-
     return prototypes
 
 
-# evaluation
+# EVALUATION
 
 def evaluate(X_test, y_test, patterns, pattern_labels, beta=4.0, noise_level=0.3, k=20):
-
     preds = []
     pixel_overlaps = []
+    failures = []
 
-    for x, true_label in zip(X_test, y_test):
-
+    for i, (x, true_label) in enumerate(zip(X_test, y_test)):
         corrupted = corrupt_pattern(x, noise_level)
-
-        state, _ = retrieve_with_trajectory(corrupted, patterns, beta=beta, k=k)
+        state, trajectory = retrieve_with_trajectory(corrupted, patterns, beta=beta, k=k)
 
         retrieved = np.sign(state)
-
         pred = nearest_label(retrieved, patterns, pattern_labels)
 
         preds.append(pred)
@@ -115,119 +133,47 @@ def evaluate(X_test, y_test, patterns, pattern_labels, beta=4.0, noise_level=0.3
         overlap = np.mean(retrieved == x)
         pixel_overlaps.append(overlap)
 
+        # DEBUG FAILURES
+        if pred != true_label:
+            failures.append(i)
+            print(f"FAIL: idx={i}, true={true_label}, pred={pred}")
+            print("Convergence steps:", convergence_steps(trajectory))
+
     preds = np.array(preds)
 
     digit_accuracy = np.mean(preds == y_test)
     pixel_accuracy = np.mean(pixel_overlaps)
-
     cm = confusion_matrix(y_test, preds)
 
-    return digit_accuracy, pixel_accuracy, cm
+    return digit_accuracy, pixel_accuracy, cm, failures
 
 
-# visualisation
+def noise_sweep(X_test, y_test, patterns, pattern_labels):
+    noise_levels = [0.1, 0.3, 0.5, 0.7]
+    accs = []
 
-def show_examples(X_test, patterns, pattern_labels, beta=4.0, noise_level=0.3, k=20, n=5):
+    for nl in noise_levels:
+        acc, _, _ = evaluate(X_test, y_test, patterns, pattern_labels, noise_level=nl)
+        accs.append(acc)
+        print(f"Noise {nl}: {acc}")
 
-    fig, axes = plt.subplots(n,3, figsize=(6,2*n))
-
-    for i in range(n):
-
-        x = X_test[i]
-
-        corrupted = corrupt_pattern(x, noise_level)
-
-        state, _ = retrieve_with_trajectory(corrupted, patterns, beta=beta, k=k)
-
-        retrieved = np.sign(state)
-
-        axes[i,0].imshow(x.reshape(28,28), cmap='gray')
-        axes[i,0].set_title('original')
-
-        axes[i,1].imshow(corrupted.reshape(28,28), cmap='gray')
-        axes[i,1].set_title('corrupted')
-
-        axes[i,2].imshow(retrieved.reshape(28,28), cmap='gray')
-        axes[i,2].set_title('retrieved')
-
-        for ax in axes[i]:
-            ax.axis('off')
-
-    plt.tight_layout()
+    plt.plot(noise_levels, accs, marker='o')
+    plt.xlabel("noise")
+    plt.ylabel("accuracy")
+    plt.title("Robustness")
     plt.show()
 
-def animate_trajectory(x, patterns, pattern_labels, beta=4.0, noise_level=0.3, k=20):
 
-    corrupted = corrupt_pattern(x, noise_level)
-
-    final_state, trajectory = retrieve_with_trajectory(
-        corrupted, patterns, beta=beta, k=k
-    )
-
-    traj = np.vstack([corrupted, trajectory])
-
-    pca = PCA(n_components=2)
-    pca.fit(patterns)
-
-    patterns_2d = pca.transform(patterns)
-    traj_2d = pca.transform(traj)
-
-    fig, ax = plt.subplots(figsize=(6,6))
-
-    # plot memory clusters
-    for d in range(10):
-        mask = pattern_labels == d
-        ax.scatter(
-            patterns_2d[mask,0],
-            patterns_2d[mask,1],
-            label=str(d),
-            alpha=0.6
-        )
-
-    point, = ax.plot([], [], 'ro', markersize=8)
-    line, = ax.plot([], [], 'k-', lw=2)
-
-    ax.set_title("Hopfield retrieval animation")
-    ax.legend()
-
-    def update(frame):
-
-        point.set_data(traj_2d[frame,0], traj_2d[frame,1])
-
-        line.set_data(
-            traj_2d[:frame+1,0],
-            traj_2d[:frame+1,1]
-        )
-
-        return point, line
-
-    anim = FuncAnimation(
-        fig,
-        update,
-        frames=len(traj_2d),
-        interval=500,
-        blit=True
-    )
-
-    anim.save("hopfield_animation.gif", writer="pillow")
-
-
-    plt.show()
-
-    return anim
-
-# visualisation
+# VISUALS
 
 def show_trajectory(x, patterns, beta=4.0, noise_level=0.3, k=20):
-
     corrupted = corrupt_pattern(x, noise_level)
+    final_state, trajectory = retrieve_with_trajectory(corrupted, patterns, beta=beta, k=k)
 
-    final_state, trajectory = retrieve_with_trajectory(
-        corrupted, patterns, beta=beta, k=k
-    )
+    sims_true, sims_all = analyse_trajectory(trajectory, x, patterns)
+    plot_convergence(sims_true, sims_all)
 
     steps = len(trajectory)
-
     fig, axes = plt.subplots(1, steps+1, figsize=(2*(steps+1),2))
 
     axes[0].imshow(x.reshape(28,28), cmap='gray')
@@ -235,67 +181,25 @@ def show_trajectory(x, patterns, beta=4.0, noise_level=0.3, k=20):
     axes[0].axis("off")
 
     for i, state in enumerate(trajectory):
-
         axes[i+1].imshow(np.sign(state).reshape(28,28), cmap='gray')
         axes[i+1].set_title(f"step {i}")
         axes[i+1].axis("off")
+    
+    pred = nearest_label(np.sign(final_state), patterns, pattern_labels)
+    print('Predicted:', pred)
 
     plt.show()
 
-def plot_pca_trajectory(x, patterns, pattern_labels, beta=4.0, noise_level=0.3, k=20):
 
-    corrupted = corrupt_pattern(x, noise_level)
-
-    final_state, trajectory = retrieve_with_trajectory(
-        corrupted, patterns, beta=beta, k=k
-    )
-
-    # convert trajectory list → array
-    traj = np.array(trajectory)
-
-    # build PCA using stored memories
-    pca = PCA(n_components=2)
-    pca.fit(patterns)
-
-    patterns_2d = pca.transform(patterns)
-    traj_2d = pca.transform(traj)
-
-    plt.figure(figsize=(6,6))
-
-    # plot memory points
-    for d in range(10):
-        mask = pattern_labels == d
-        plt.scatter(
-            patterns_2d[mask,0],
-            patterns_2d[mask,1],
-            label=str(d),
-            alpha=0.6
-        )
-
-    # plot trajectory
-    plt.plot(traj_2d[:,0], traj_2d[:,1], 'k-o', label="trajectory")
-
-    # start/end markers
-    plt.scatter(traj_2d[0,0], traj_2d[0,1], c='red', s=100, label="start")
-    plt.scatter(traj_2d[-1,0], traj_2d[-1,1], c='green', s=100, label="final")
-
-    plt.legend()
-    plt.title("Hopfield retrieval trajectory (PCA space)")
-    plt.show()
-
-# load MNIST
+# MAIN
 
 print("Loading MNIST...")
 
 mnist = fetch_openml('mnist_784', version=1, as_frame=False)
-
 X = mnist.data
 y = mnist.target.astype(int)
 
 X_binary = np.where(X > 127, 1.0, -1.0)
-
-
-# build prototype memories
 
 n_prototypes = 5
 samples_per_proto = 10
@@ -306,14 +210,10 @@ patterns = np.vstack([
 ])
 
 pattern_labels = np.hstack([
-    [d]*n_prototypes
-    for d in range(10)
+    [d]*n_prototypes for d in range(10)
 ])
 
 print("Stored memories:", len(patterns))
-
-
-# test set
 
 test_per_digit = 50
 
@@ -324,44 +224,41 @@ X_test = np.vstack([
 ])
 
 y_test = np.hstack([
-    [d]*test_per_digit
-    for d in range(10)
+    [d]*test_per_digit for d in range(10)
 ])
 
 
-# evaluate
+# THESE ARE THE THREE FUNCTIONS
+# FOR EXPERIMENTS
 
-acc, pix, cm = evaluate(
-    X_test,
-    y_test,
-    patterns,
-    pattern_labels,
-    beta=4.0,
-    noise_level=0.3,
-    k=20
-)
+MODE = 'trajectory' # or 'evaluate', 'noise', 'trajectory'
 
-print("\nDigit accuracy:", acc)
-print("Pixel overlap:", pix)
+if MODE == 'evaluate':
+    # How good is it?
+    # accuracy, confusion matrix, overall behaviour
 
-print("\nConfusion matrix:\n", cm)
+    acc, pix, cm, failures = evaluate(
+        X_test,
+        y_test,
+        patterns,
+        pattern_labels,
+        noise_level=0.3
+    )
 
+    print("\nDigit accuracy:", acc)
+    print("Pixel overlap:", pix)
+    print("\nConfusion matrix:\n", cm)
 
-# example reconstructions
+elif MODE == 'noise':
+    # How does it break?
+    # perfomance vs noise, robustness curve
 
-show_examples(
-    X_test,
-    patterns,
-    pattern_labels,
-    beta=4.0,
-    noise_level=0.3,
-    k=20
-)
+    noise_sweep(X_test, y_test, patterns, pattern_labels)
 
-show_trajectory(X_test[0], patterns, beta=4.0, noise_level=0.3)
+elif MODE == 'trajectory':
+    # What is it doing internally?
+    # convergence behaviour, attractor dynamics, failure analysis
 
-patterns = patterns / np.linalg.norm(patterns, axis=1, keepdims=True)
-plot_pca_trajectory(X_test[0], patterns, pattern_labels)
-animate_trajectory(X_test[0], patterns, pattern_labels)
+    show_trajectory(X_test[317], patterns)
 
 sys.stdout.close()
