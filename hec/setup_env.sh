@@ -5,7 +5,16 @@
 # Creates a mamba env in your storage area so we don't blow the home-dir quota.
 # Reference: https://lancaster-hec.readthedocs.io/en/latest/python.html
 
-set -euo pipefail
+set -eo pipefail
+
+# /etc/profile sets $global_storage and makes `module` available. `bash script.sh`
+# starts a non-interactive shell that doesn't source it by default.
+source /etc/profile
+
+if [ -z "${global_storage:-}" ]; then
+    echo "ERROR: \$global_storage is not set. Are you logged in to the HEC?" >&2
+    exit 1
+fi
 
 # Redirect conda/mamba/pip caches off the small home partition (idempotent-ish:
 # will fail loudly if the symlinks already exist, which is fine).
