@@ -1,4 +1,4 @@
-'''E-I LIF network with STDP. Refactored for headless / batch runs on the Lancaster HEC.
+'''E-I LIF network with STDP. Refactored for headless / batch runs on the Lancaster Hex.
 
 Local quick run:
     python random_neurons.py --N 100 --warmup 2000 --steps 3000 --seed 0 --outdir results
@@ -147,13 +147,21 @@ def main():
         return
 
     if spikes.size:
+        # ZOOM IN: Only grab spikes between step 10000 and 11000 for the first 100 neurons
+        t_start = 1000.0  # ms
+        t_end = 2000.0    # ms
+        
+        mask = (spikes[:, 0] > t_start) & (spikes[:, 0] < t_end) & (spikes[:, 1] < 100)
+        zoomed_spikes = spikes[mask]
+
         plt.figure(figsize=(12, 5))
-        plt.scatter(spikes[:, 0], spikes[:, 1], s=2, color='teal')
+        # Make the dots smaller with s=0.5
+        plt.scatter(zoomed_spikes[:, 0], zoomed_spikes[:, 1], s=0.5, color='teal')
         plt.xlabel('time (ms)')
         plt.ylabel('neuron index')
-        plt.title(f'spike raster (N={args.N}, seed={args.seed})')
+        plt.title(f'Zoomed spike raster (Neurons 0-100, {t_start}-{t_end}ms)')
         plt.tight_layout()
-        plt.savefig(os.path.join(args.outdir, f'raster_{tag}.png'), dpi=150)
+        plt.savefig(os.path.join(args.outdir, f'raster_zoomed_{tag}.png'), dpi=150)
         plt.close()
 
     plt.figure(figsize=(12, 4))
