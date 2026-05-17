@@ -28,7 +28,7 @@ export PYTHONUNBUFFERED=1
 
 echo "[job] host=$(hostname) jobid=$SLURM_JOB_ID started=$(date)"
 
-python random_neurons.py \
+python random_neurons_fixed.py \
     --N 2000 \
     --warmup 5000 \
     --steps 20000 \

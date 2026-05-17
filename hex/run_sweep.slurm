@@ -26,7 +26,7 @@ export PYTHONUNBUFFERED=1
 
 echo "[task $SLURM_ARRAY_TASK_ID] host=$(hostname) started=$(date)"
 
-python random_neurons.py \
+python random_neurons_fixed.py \
     --N 2000 \
     --warmup 5000 \
     --steps 20000 \
