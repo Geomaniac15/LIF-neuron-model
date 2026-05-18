@@ -1,0 +1,7 @@
+[task 9] host=hex-p3-c4 started=Sun 17 May 20:11:03 BST 2026
+[run] N=2000 warmup=5000 steps=20000 dt=0.1 seed=9 w_scale=0.005 I=[1.4,1.6] R=10.0 A+=0.002 A-=0.002 outdir=results
+[save] results/run_N2000_seed9.npz (470901 spikes)
+[stats] mean_rate=117.73 Hz  max=491.00 Hz  silent=0/2000
+[stats] synapses=199357  potentiated=51.3%  depressed=48.7%  unchanged=0.0%  mean_dW=+0.00111
+[done] figures saved to results/
+[task 9] finished=Sun 17 May 20:52:51 BST 2026

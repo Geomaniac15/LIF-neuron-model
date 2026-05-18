@@ -1,0 +1,2 @@
+[task 7] host=hex-p3-c3 started=Mon 18 May 17:35:19 BST 2026
+[run] N=2000 warmup=5000 steps=20000 dt=0.1 seed=7 w_scale=0.005 I=[1.4,1.6] R=10.0 A+=0.002 A-=0.002 outdir=results_fixed
