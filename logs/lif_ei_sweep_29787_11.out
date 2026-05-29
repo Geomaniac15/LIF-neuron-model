@@ -1,0 +1,6 @@
+[job] host=hex-p3-c4 jobid=29787 arrayid=11 started=Fri 29 May 10:25:43 BST 2026
+[job] seed=5 a_minus=0.0022 I=[1.2,1.4]
+[run] N=2000 warmup=5000 steps=20000 dt=0.1 seed=5 w_scale=0.005 I=[1.2,1.4] R=10.0 A+=0.002 A-=0.0022 outdir=results
+[save] results/run_N2000_seed5.npz (0 spikes)
+[stats] synapses=199133  potentiated=42.7%  depressed=57.3%  unchanged=0.0%  mean_dW=-0.00262
+[job] finished=Fri 29 May 10:28:01 BST 2026
