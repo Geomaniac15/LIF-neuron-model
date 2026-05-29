@@ -68,7 +68,5 @@ python random_neurons_fixed.py \
     --I-lo "$I_LO" \
     --I-hi "$I_HI" \
     --outdir results \
-    --no-spikes \
-    --no-plots
 
 echo "[job] finished=$(date)"
