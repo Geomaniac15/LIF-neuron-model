@@ -1,0 +1,9 @@
+[job] host=hex-p3-c1 jobid=29862 arrayid=1 started=Fri 29 May 14:37:54 BST 2026
+[job] CONFIRM seed=1  locked AI params  outdir=results_ai/ai_confirm_seed1
+[run] N=2000 warmup=5000 steps=20000 dt=0.1 seed=1 w_scale=0.000300 (from w_total=0.00424, K=200) I_mean=1.4 I_spread=0.1 sigma=3.0 g_inh=5.0 conn=0.1 R=10.0 A+=0.002 A-=0.0024 outdir=results_ai/ai_confirm_seed1
+[save] results_ai/ai_confirm_seed1/run_N2000_seed1.npz (32420 spikes)
+[stats] mean_rate=8.11 Hz  max=402.00 Hz  silent=0/2000
+[stats] pop_CV=0.422 (low=async)  ISI_CV=1.09 (high=irregular)  -> AI-ish
+[stats] synapses=399312  potentiated=43.6%  depressed=56.4%  unchanged=0.0%  mean_dW=-0.00033
+[done] figures saved to results_ai/ai_confirm_seed1/
+[job] finished=Fri 29 May 14:39:36 BST 2026

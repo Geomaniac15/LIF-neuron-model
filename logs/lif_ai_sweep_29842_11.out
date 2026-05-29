@@ -1,0 +1,3 @@
+[job] host=hex-p3-c6 jobid=29854 arrayid=11 started=Fri 29 May 14:31:26 BST 2026
+[job] I_mean=1.4 sigma=5.0 g_inh=5.0 conn=0.1 outdir=results/ai_im1.4_sg5.0
+[run] N=2000 warmup=5000 steps=20000 dt=0.1 seed=0 w_scale=0.005 I_mean=1.4 I_spread=0.1 sigma=5.0 g_inh=5.0 conn=0.1 R=10.0 A+=0.002 A-=0.0024 outdir=results/ai_im1.4_sg5.0
