@@ -1,1 +1,5 @@
 /var/spool/slurmd/job29261/slurm_script: line 17: module: command not found
+/mnt/nfs/homes/vealg/LIF-neuron-model/random_neurons_fixed.py:101: RuntimeWarning: overflow encountered in multiply
+  dV = (1.0 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn))
+/mnt/nfs/homes/vealg/LIF-neuron-model/random_neurons_fixed.py:101: RuntimeWarning: invalid value encountered in add
+  dV = (1.0 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn))
