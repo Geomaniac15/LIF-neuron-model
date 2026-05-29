@@ -64,7 +64,7 @@ import matplotlib.pyplot as plt
 
 def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
         exc_frac=0.8, connectivity=0.05, save_spikes=True,
-        w_scale=0.005, I_mean=1.5, I_spread=0.1, sigma=0.0, R=10.0,
+        w_scale=0.005, w_total=None, I_mean=1.5, I_spread=0.1, sigma=0.0, R=10.0,
         A_plus=0.002, A_minus=0.002, g_inh=1.0):
     '''Run the E-I network. Returns (W_initial, W_final, spikes).
 
@@ -77,9 +77,24 @@ def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
     neuron temporal noise). sigma=0 recovers constant per-neuron drive.
 
     g_inh scales the magnitude of inhibitory outgoing weights (inhibition-dominance).
+
+    Weight scaling: the network's dynamical regime depends on the per-neuron
+    TOTAL input, which is roughly (peak weight) x (number of inputs K), where
+    K = connectivity * N. If you hold the peak weight fixed and grow N, total
+    input grows with N and the network tips from asynchronous into synchronised
+    bursting. To keep the regime invariant across sizes, pass w_total instead of
+    w_scale: the peak weight is then set to w_total / sqrt(K), the balanced-network
+    (1/sqrt(K)) scaling that keeps input FLUCTUATIONS constant as N changes (the
+    relevant quantity for the asynchronous-irregular state). If w_total is None,
+    the explicit w_scale is used as-is (manual mode / backward compatible).
     '''
     rng = np.random.default_rng(seed)
     n_exc = int(round(exc_frac * N))
+
+    # Size-invariant weight scaling (overrides w_scale when w_total is given).
+    if w_total is not None:
+        K = max(1.0, connectivity * N)        # expected inputs per neuron
+        w_scale = w_total / np.sqrt(K)
 
     V = np.full(N, -70.0)
     # Baseline drive: small static heterogeneity across neurons.
@@ -219,7 +234,12 @@ def main():
     p.add_argument('--connectivity', type=float, default=0.05,
                    help='connection probability (denser helps inhibition track excitation; ~0.1 for AI)')
     p.add_argument('--w-scale', type=float, default=0.005,
-                   help='peak initial weight magnitude (was 0.5, now 0.005)')
+                   help='peak initial weight magnitude (manual mode; ignored if --w-total set)')
+    p.add_argument('--w-total', type=float, default=None,
+                   help='size-invariant weight target: peak weight = w_total/sqrt(K), '
+                        'K=connectivity*N. Use this instead of --w-scale to keep the '
+                        'dynamical regime fixed across N. (e.g. ~0.0042 reproduces '
+                        'w_scale=0.0003 at N=2000, conn=0.1)')
     # --- drive model ---
     p.add_argument('--I-mean', type=float, default=1.5,
                    help='mean external drive (rheobase ~1.5 for these params; '
@@ -246,8 +266,15 @@ def main():
 
     os.makedirs(args.outdir, exist_ok=True)
     tag = f'N{args.N}_seed{args.seed}'
+    # Mirror the in-run scaling so the log reports the weight actually used.
+    if args.w_total is not None:
+        K = max(1.0, args.connectivity * args.N)
+        eff_w_scale = args.w_total / np.sqrt(K)
+        w_desc = f'w_scale={eff_w_scale:.6f} (from w_total={args.w_total}, K={K:.0f})'
+    else:
+        w_desc = f'w_scale={args.w_scale}'
     print(f'[run] N={args.N} warmup={args.warmup} steps={args.steps} '
-          f'dt={args.dt} seed={args.seed} w_scale={args.w_scale} '
+          f'dt={args.dt} seed={args.seed} {w_desc} '
           f'I_mean={args.I_mean} I_spread={args.I_spread} sigma={args.sigma} '
           f'g_inh={args.g_inh} conn={args.connectivity} R={args.R} '
           f'A+={args.a_plus} A-={args.a_minus} outdir={args.outdir}', flush=True)
@@ -256,7 +283,8 @@ def main():
         N=args.N, warmup=args.warmup, steps=args.steps, dt=args.dt,
         seed=args.seed, exc_frac=args.exc_frac, connectivity=args.connectivity,
         save_spikes=not args.no_spikes,
-        w_scale=args.w_scale, I_mean=args.I_mean, I_spread=args.I_spread,
+        w_scale=args.w_scale, w_total=args.w_total, I_mean=args.I_mean,
+        I_spread=args.I_spread,
         sigma=args.sigma, R=args.R,
         A_plus=args.a_plus, A_minus=args.a_minus, g_inh=args.g_inh,
     )
