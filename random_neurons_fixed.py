@@ -15,11 +15,44 @@ Changes vs random_neurons.py:
     is unambiguous (was harmless before, just confusing).
   * Exposed w-scale, a-plus, a-minus, I-lo, I-hi on the CLI for sweeps.
 
+Changes for the asynchronous-irregular (AI) regime (Brunel 2000-style):
+  * NOISY DRIVE. The external current is now I_mean + sigma * N(0,1)/sqrt(dt),
+    redrawn every step, instead of a constant per-neuron value. Constant drive
+    makes a LIF neuron fire like a clock (ISI_CV -> 0); irregular firing REQUIRES
+    a fluctuating input. The /sqrt(dt) keeps the noise amplitude independent of
+    the time step (proper white-noise scaling), so dt stays interchangeable.
+    --I-mean sets the mean drive; --sigma sets the fluctuation size. With
+    --sigma 0 the model reduces to the old constant-drive behaviour, except the
+    mean is now drawn in a small band around I_mean (see I_base below).
+  * INHIBITORY GAIN. Inhibitory outgoing weights are scaled by -g_inh instead
+    of just -1. The AI state is inhibition-dominated: inhibition has to be
+    several times stronger than excitation (per synapse) to track and cancel it,
+    otherwise the population synchronises into waves. --g-inh sets this; ~4-6 is
+    a sensible starting range.
+  * SELF-REPORTING REGIME STATS. The [stats] line now also prints pop_CV
+    (population synchrony: CV of the binned population spike count; high => global
+    rhythm/waves) and ISI_CV (mean per-neuron coefficient of variation of
+    inter-spike intervals; ~1.0 => Poisson-like/irregular, ~0 => clock-like).
+    Target AI regime: pop_CV low AND ISI_CV high. Lets a run self-diagnose
+    without eyeballing the raster.
+
+NOTE on reaching a *textbook* AI state: parameter tuning gets you a network that
+looks asynchronous and irregular (low pop_CV, ISI_CV ~0.5-0.6), which is a solid
+realistic baseline. Quantitatively Poisson firing (ISI_CV ~1.0) is capped here by
+the 2 ms refractory floor at these rates and would need structural changes
+(synaptic delays, lower operating rates, tighter E/I balance). Treat the AI
+parameters below as a good starting regime, not a final calibration.
+
 Local quick run:
     python random_neurons_fixed.py --N 100 --warmup 2000 --steps 3000 --seed 0 --outdir results
 
+Local AI-regime sanity check (WITH spikes so you see the rate):
+    python random_neurons_fixed.py --N 200 --warmup 2000 --steps 4000 --seed 0 \
+        --I-mean 1.4 --sigma 3.0 --g-inh 5.0 --connectivity 0.1 --outdir results
+
 Big run on the cluster:
-    python random_neurons_fixed.py --N 2000 --warmup 5000 --steps 20000 --seed 0 --outdir results
+    python random_neurons_fixed.py --N 2000 --warmup 5000 --steps 20000 --seed 0 \
+        --I-mean 1.4 --sigma 3.0 --g-inh 5.0 --connectivity 0.1 --outdir results
 '''
 import argparse
 import os
@@ -31,20 +64,29 @@ import matplotlib.pyplot as plt
 
 def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
         exc_frac=0.8, connectivity=0.05, save_spikes=True,
-        w_scale=0.005, I_lo=1.4, I_hi=1.6, R=10.0,
-        A_plus=0.002, A_minus=0.002):
+        w_scale=0.005, I_mean=1.5, I_spread=0.1, sigma=0.0, R=10.0,
+        A_plus=0.002, A_minus=0.002, g_inh=1.0):
     '''Run the E-I network. Returns (W_initial, W_final, spikes).
 
     spikes is an (M, 2) array of (time_ms, neuron_index). Pass save_spikes=False
     for very large runs where the spike list itself becomes the memory hog.
+
+    Drive model: each neuron has a fixed baseline I_base drawn uniformly in
+    [I_mean - I_spread, I_mean + I_spread] (heterogeneity across the population),
+    plus, every step, a white-noise fluctuation sigma * N(0,1) / sqrt(dt) (within-
+    neuron temporal noise). sigma=0 recovers constant per-neuron drive.
+
+    g_inh scales the magnitude of inhibitory outgoing weights (inhibition-dominance).
     '''
     rng = np.random.default_rng(seed)
     n_exc = int(round(exc_frac * N))
 
     V = np.full(N, -70.0)
-    I_ext = rng.uniform(I_lo, I_hi, N)
+    # Baseline drive: small static heterogeneity across neurons.
+    I_base = rng.uniform(I_mean - I_spread, I_mean + I_spread, N)
     g_exc = np.zeros(N)
-    g_inh = np.zeros(N)
+    g_inh_v = np.zeros(N)  # inhibitory CONDUCTANCE (renamed from g_inh to free the
+                           # name for the inhibitory GAIN parameter g_inh)
 
     E_exc, E_inh = 0.0, -80.0
     tau_m = rng.uniform(15, 25, N)
@@ -57,19 +99,22 @@ def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
     mask = rng.random((N, N)) > (1.0 - connectivity)
     W = W * mask
     np.fill_diagonal(W, 0)
-    W[n_exc:, :] *= -1  # inhibitory neurons have negative outgoing weights
+    W[n_exc:, :] *= -g_inh  # inhibitory neurons: negative AND scaled by the gain
     refractory = np.zeros(N)
 
     tau_stdp = 40.0
     last_spike = np.full(N, -np.inf)
 
+    inv_sqrt_dt = 1.0 / np.sqrt(dt)
+
     # ---- warmup (no STDP) ----
     for step in range(warmup):
-        # FIX: conductance-based synaptic current is I = -g*(V-E), not +g*(V-E).
-        # With the original sign, exc spikes drove V away from E_exc=0, i.e.
-        # they hyperpolarized their targets. With the corrected sign, exc
-        # spikes depolarize and inh spikes hyperpolarize as expected.
-        I_syn = -g_exc * (V - E_exc) - g_inh * (V - E_inh)
+        # Noisy external drive: baseline + white-noise fluctuation (if sigma>0).
+        I_ext = I_base
+        if sigma > 0.0:
+            I_ext = I_base + sigma * rng.standard_normal(N) * inv_sqrt_dt
+        # Conductance-based synaptic current: I = -g*(V-E) (sign-fixed).
+        I_syn = -g_exc * (V - E_exc) - g_inh_v * (V - E_inh)
         dV = (1.0 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn))
         V += dV * dt
         refractory -= dt
@@ -85,10 +130,10 @@ def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
         if exc_fired.any():
             g_exc += W[exc_fired].sum(axis=0)
         if inh_fired.any():
-            g_inh += W[inh_fired].sum(axis=0)
+            g_inh_v += W[inh_fired].sum(axis=0)
 
         g_exc -= (g_exc / tau_syn) * dt
-        g_inh -= (g_inh / tau_syn) * dt
+        g_inh_v -= (g_inh_v / tau_syn) * dt
 
     W_initial = W.copy()
     spike_record = [] if save_spikes else None
@@ -97,7 +142,10 @@ def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
     # NOTE: kept as an explicit loop because STDP updates within a step are
     # order-dependent (last_spike is mutated as we iterate).
     for step in range(steps):
-        I_syn = -g_exc * (V - E_exc) - g_inh * (V - E_inh)  # FIX: see comment above
+        I_ext = I_base
+        if sigma > 0.0:
+            I_ext = I_base + sigma * rng.standard_normal(N) * inv_sqrt_dt
+        I_syn = -g_exc * (V - E_exc) - g_inh_v * (V - E_inh)  # FIX: see comment above
         dV = (1.0 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn))
         V += dV * dt
         refractory -= dt
@@ -110,7 +158,7 @@ def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
             if i < n_exc:
                 g_exc += W[i, :]
             else:
-                g_inh += W[i, :]
+                g_inh_v += W[i, :]
 
             if save_spikes:
                 spike_record.append((t_now, i))
@@ -125,31 +173,73 @@ def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
             np.clip(W, -1.0, 1.0, out=W)
 
         g_exc -= (g_exc / tau_syn) * dt
-        g_inh -= (g_inh / tau_syn) * dt
+        g_inh_v -= (g_inh_v / tau_syn) * dt
 
     spikes_arr = np.array(spike_record) if save_spikes else np.empty((0, 2))
     return W_initial, W, spikes_arr
 
 
+def regime_metrics(spikes, N, steps, dt, bin_ms=5.0):
+    '''Return (pop_CV, ISI_CV) describing where the run sits in the dynamical map.
+
+    pop_CV: CV of the population spike count in bin_ms windows. High => the whole
+            population fires in synchronised waves (global rhythm). Low => spikes
+            are spread evenly in time (asynchronous).
+    ISI_CV: mean over neurons of the per-neuron inter-spike-interval CV. ~0 =>
+            clock-like/regular firing; ~1.0 => Poisson-like/irregular.
+    AI regime = low pop_CV AND high ISI_CV.
+    '''
+    if spikes.size == 0:
+        return float('nan'), float('nan')
+    T = steps * dt
+    nbins = max(1, int(T / bin_ms))
+    counts, _ = np.histogram(spikes[:, 0], bins=nbins, range=(0, T))
+    pop_cv = counts.std() / counts.mean() if counts.mean() > 0 else float('nan')
+
+    isi_cvs = []
+    idx = spikes[:, 1].astype(int)
+    for nid in range(N):
+        ts = np.sort(spikes[idx == nid, 0])
+        if len(ts) > 3:
+            isis = np.diff(ts)
+            if isis.mean() > 0:
+                isi_cvs.append(isis.std() / isis.mean())
+    isi_cv = float(np.mean(isi_cvs)) if isi_cvs else float('nan')
+    return pop_cv, isi_cv
+
+
 def main():
-    p = argparse.ArgumentParser(description='E-I LIF network with STDP (sign-fixed).')
+    p = argparse.ArgumentParser(description='E-I LIF network with STDP (sign-fixed, AI-capable).')
     p.add_argument('--N', type=int, default=100, help='number of neurons')
     p.add_argument('--warmup', type=int, default=2000, help='warmup steps (no STDP)')
     p.add_argument('--steps', type=int, default=3000, help='main run steps (with STDP)')
     p.add_argument('--dt', type=float, default=0.1, help='step size (ms)')
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--exc-frac', type=float, default=0.8)
-    p.add_argument('--connectivity', type=float, default=0.05)
+    p.add_argument('--connectivity', type=float, default=0.05,
+                   help='connection probability (denser helps inhibition track excitation; ~0.1 for AI)')
     p.add_argument('--w-scale', type=float, default=0.005,
                    help='peak initial weight magnitude (was 0.5, now 0.005)')
-    p.add_argument('--I-lo', type=float, default=1.4, help='lower bound of I_ext per neuron')
-    p.add_argument('--I-hi', type=float, default=1.6, help='upper bound of I_ext per neuron')
+    # --- drive model ---
+    p.add_argument('--I-mean', type=float, default=1.5,
+                   help='mean external drive (rheobase ~1.5 for these params; '
+                        'near/below threshold + noise gives fluctuation-driven firing)')
+    p.add_argument('--I-spread', type=float, default=0.1,
+                   help='half-width of static per-neuron drive heterogeneity around I_mean')
+    p.add_argument('--sigma', type=float, default=0.0,
+                   help='white-noise drive amplitude (0 = constant drive = clock-like firing; '
+                        '~3 gives irregular firing). Scaled internally by 1/sqrt(dt).')
     p.add_argument('--R', type=float, default=10.0, help='membrane resistance')
+    # --- inhibition ---
+    p.add_argument('--g-inh', type=float, default=1.0,
+                   help='inhibitory weight gain (1 = matched to excitation; ~4-6 = '
+                        'inhibition-dominated, needed for the asynchronous state)')
+    # --- STDP ---
     p.add_argument('--a-plus', type=float, default=0.002, help='STDP potentiation rate')
     p.add_argument('--a-minus', type=float, default=0.002, help='STDP depression rate')
     p.add_argument('--outdir', type=str, default='results')
     p.add_argument('--no-spikes', action='store_true',
-                   help='skip spike recording (saves memory for huge runs)')
+                   help='skip spike recording (saves memory; also disables regime stats)')
     p.add_argument('--no-plots', action='store_true',
                    help='skip rendering figures, only save .npz')
     args = p.parse_args()
@@ -158,15 +248,17 @@ def main():
     tag = f'N{args.N}_seed{args.seed}'
     print(f'[run] N={args.N} warmup={args.warmup} steps={args.steps} '
           f'dt={args.dt} seed={args.seed} w_scale={args.w_scale} '
-          f'I=[{args.I_lo},{args.I_hi}] R={args.R} '
+          f'I_mean={args.I_mean} I_spread={args.I_spread} sigma={args.sigma} '
+          f'g_inh={args.g_inh} conn={args.connectivity} R={args.R} '
           f'A+={args.a_plus} A-={args.a_minus} outdir={args.outdir}', flush=True)
 
     W_initial, W, spikes = run(
         N=args.N, warmup=args.warmup, steps=args.steps, dt=args.dt,
         seed=args.seed, exc_frac=args.exc_frac, connectivity=args.connectivity,
         save_spikes=not args.no_spikes,
-        w_scale=args.w_scale, I_lo=args.I_lo, I_hi=args.I_hi, R=args.R,
-        A_plus=args.a_plus, A_minus=args.a_minus,
+        w_scale=args.w_scale, I_mean=args.I_mean, I_spread=args.I_spread,
+        sigma=args.sigma, R=args.R,
+        A_plus=args.a_plus, A_minus=args.a_minus, g_inh=args.g_inh,
     )
 
     npz_path = os.path.join(args.outdir, f'run_{tag}.npz')
@@ -180,8 +272,13 @@ def main():
         sim_s = (args.steps * args.dt) / 1000.0
         counts = np.bincount(spikes[:, 1].astype(int), minlength=args.N)
         rates = counts / sim_s
+        pop_cv, isi_cv = regime_metrics(spikes, args.N, args.steps, args.dt)
         print(f'[stats] mean_rate={rates.mean():.2f} Hz  max={rates.max():.2f} Hz  '
               f'silent={int((rates == 0).sum())}/{args.N}', flush=True)
+        print(f'[stats] pop_CV={pop_cv:.3f} (low=async)  ISI_CV={isi_cv:.2f} (high=irregular)  '
+              f'-> {"AI-ish" if (pop_cv < 0.5 and isi_cv > 0.5) else "not AI"}', flush=True)
+    else:
+        print('[stats] NO SPIKES recorded (network silent, or --no-spikes set)', flush=True)
     mask = W_initial != 0
     if mask.any():
         dw = (W - W_initial)[mask]

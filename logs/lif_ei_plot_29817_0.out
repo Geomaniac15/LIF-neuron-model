@@ -1,0 +1,7 @@
+[job] host=hex-p3-c3 jobid=29818 arrayid=0 started=Fri 29 May 10:41:21 BST 2026
+[job] seed=3 a_minus=0.0022 I=[1.1,1.3] outdir=results/plot_cfg0_seed3
+[run] N=2000 warmup=5000 steps=20000 dt=0.1 seed=3 w_scale=0.005 I=[1.1,1.3] R=10.0 A+=0.002 A-=0.0022 outdir=results/plot_cfg0_seed3
+[save] results/plot_cfg0_seed3/run_N2000_seed3.npz (0 spikes)
+[stats] synapses=199352  potentiated=0.0%  depressed=0.0%  unchanged=100.0%  mean_dW=+0.00000
+[done] figures saved to results/plot_cfg0_seed3/
+[job] finished=Fri 29 May 10:41:23 BST 2026

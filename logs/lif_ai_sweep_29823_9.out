@@ -1,0 +1,8 @@
+[job] host=hex-p3-c5 jobid=29833 arrayid=9 started=Fri 29 May 13:54:12 BST 2026
+[job] I_mean=1.4 sigma=3.0 g_inh=5.0 conn=0.1 outdir=results/ai_im1.4_sg3.0
+[run] N=2000 warmup=5000 steps=20000 dt=0.1 seed=0 w_scale=0.005 I_mean=1.4 I_spread=0.1 sigma=3.0 g_inh=5.0 conn=0.1 R=10.0 A+=0.002 A-=0.0024 outdir=results/ai_im1.4_sg3.0
+[save] results/ai_im1.4_sg3.0/run_N2000_seed0.npz (47785 spikes)
+[stats] mean_rate=11.95 Hz  max=375.00 Hz  silent=0/2000
+[stats] pop_CV=4.345 (low=async)  ISI_CV=1.02 (high=irregular)  -> not AI
+[stats] synapses=399270  potentiated=38.6%  depressed=61.4%  unchanged=0.0%  mean_dW=-0.00452
+[job] finished=Fri 29 May 14:03:57 BST 2026
