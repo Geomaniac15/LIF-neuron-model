@@ -312,6 +312,9 @@ def main():
                    help='skip spike recording (saves memory; also disables regime stats)')
     p.add_argument('--no-plots', action='store_true',
                    help='skip rendering figures, only save .npz')
+    p.add_argument('--raster-window-ms', type=float, default=500.0,
+                   help='plot only the last N ms of spikes in the raster so long '
+                        'runs do not saturate into a solid block. <=0 = whole run.')
     args = p.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
@@ -380,11 +383,27 @@ def main():
         return
 
     if spikes.size:
+        # Overplotting guard: a long run (e.g. 20000 steps) packs >100k spikes
+        # across the full 2000 ms into the scatter, saturating it into a solid
+        # block with no visible structure. Plot only a window (default the last
+        # 500 ms = the settled state) with small markers so the asynchronous-
+        # irregular pattern is actually legible. --raster-window-ms <= 0 restores
+        # the old whole-run behaviour.
+        T = args.steps * args.dt
+        if args.raster_window_ms and args.raster_window_ms > 0:
+            t_lo = max(0.0, T - args.raster_window_ms)
+            sel = spikes[:, 0] >= t_lo
+            rs = spikes[sel]
+            win_desc = f'  [last {T - t_lo:.0f} ms]'
+        else:
+            rs = spikes
+            win_desc = ''
         plt.figure(figsize=(12, 5))
-        plt.scatter(spikes[:, 0], spikes[:, 1], s=2, color='teal')
+        plt.scatter(rs[:, 0], rs[:, 1], s=1.0, color='teal',
+                    linewidths=0, rasterized=True)
         plt.xlabel('time (ms)')
         plt.ylabel('neuron index')
-        plt.title(f'spike raster (N={args.N}, seed={args.seed})')
+        plt.title(f'spike raster (N={args.N}, seed={args.seed}){win_desc}')
         plt.tight_layout()
         plt.savefig(os.path.join(args.outdir, f'raster_{tag}.png'), dpi=150)
         plt.close()
