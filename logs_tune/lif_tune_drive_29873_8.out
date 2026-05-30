@@ -1,0 +1,9 @@
+[job] host=hex-p3-c3 jobid=29873 arrayid=8 started=Fri 29 May 15:18:46 BST 2026
+[job] I_mean=1.4 sigma=7.0  (locked: g_inh=5.0 conn=0.1 w_total=0.00424 a_plus=0.002 a_minus=0.0024 w_max_mult=2.0)  outdir=results_tune/tune_im1.4_sg7.0
+[run] N=2000 warmup=3000 steps=4000 dt=0.1 seed=0 w_scale=0.000300 (from w_total=0.00424, K=200) I_mean=1.4 I_spread=0.1 sigma=7.0 g_inh=5.0 conn=0.1 R=10.0 A+=0.002 A-=0.0024 outdir=results_tune/tune_im1.4_sg7.0
+[save] results_tune/tune_im1.4_sg7.0/run_N2000_seed0.npz (29291 spikes)
+[stats] mean_rate=36.61 Hz  max=70.00 Hz  silent=0/2000
+[stats] pop_CV=0.046 (low=async)  ISI_CV=0.59 (high=irregular)  max/mean=1.9  -> AI-ish
+[stats] synapses=399270  potentiated=87.8%  depressed=12.2%  unchanged=0.0%  mean_dW=+0.00006
+[done] figures saved to results_tune/tune_im1.4_sg7.0/
+[job] finished=Fri 29 May 15:21:10 BST 2026

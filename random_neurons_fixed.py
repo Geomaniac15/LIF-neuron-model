@@ -65,7 +65,7 @@ import matplotlib.pyplot as plt
 def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
         exc_frac=0.8, connectivity=0.05, save_spikes=True,
         w_scale=0.005, w_total=None, I_mean=1.5, I_spread=0.1, sigma=0.0, R=10.0,
-        A_plus=0.002, A_minus=0.002, g_inh=1.0):
+        A_plus=0.002, A_minus=0.002, g_inh=1.0, w_max_mult=4.0):
     '''Run the E-I network. Returns (W_initial, W_final, spikes).
 
     spikes is an (M, 2) array of (time_ms, neuron_index). Pass save_spikes=False
@@ -119,6 +119,11 @@ def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
 
     tau_stdp = 40.0
     last_spike = np.full(N, -np.inf)
+
+    # Soft-bound ceiling for |W|. Must exceed the initial peak weight (w_scale)
+    # or synapses start at the ceiling with no room to potentiate. w_max_mult is
+    # how many times the initial peak the ceiling sits at.
+    w_max = w_max_mult * w_scale
 
     inv_sqrt_dt = 1.0 / np.sqrt(dt)
 
@@ -182,10 +187,34 @@ def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
             # uses the previous spike of neuron i (harmless either way because
             # W[i, i] = 0, but this reads more naturally).
             delta_t = t_now - last_spike
-            W[:, i] += A_plus * np.exp(-delta_t / tau_stdp) * (W[:, i] != 0)
-            W[i, :] -= A_minus * np.exp(-delta_t / tau_stdp) * (W[i, :] != 0)
+            decay = np.exp(-delta_t / tau_stdp)
+
+            # SOFT-BOUND (multiplicative) STDP. Additive STDP (the previous
+            # `W += A_plus*decay`) is unstable: it relies on np.clip to catch
+            # runaway, so over a long run individual synapses saturate at the
+            # rail and their targets fire continuously (the "streak" neurons in
+            # the raster). Soft bounds remove that: the potentiation step shrinks
+            # to zero as a synapse approaches its ceiling, and depression shrinks
+            # as it approaches zero, so weights asymptote smoothly instead of
+            # slamming the bound. This gives a stable weight distribution.
+            #
+            # The network has BOTH signs of weight (excitatory >=0, inhibitory
+            # <=0), so we bound on MAGNITUDE and preserve sign: potentiation
+            # pushes |W| toward w_max, depression pushes |W| toward 0.
+            #   headroom = (w_max - |W|)  -> ~0 near the ceiling, kills potentiation
+            #   |W|                       -> ~0 near zero,        kills depression
+            sign_col = np.sign(W[:, i])
+            head_col = (w_max - np.abs(W[:, i]))
+            W[:, i] += A_plus * decay * head_col * sign_col * (W[:, i] != 0)
+
+            sign_row = np.sign(W[i, :])
+            mag_row = np.abs(W[i, :])
+            W[i, :] -= A_minus * decay * mag_row * sign_row * (W[i, :] != 0)
+
             last_spike[i] = t_now
-            np.clip(W, -1.0, 1.0, out=W)
+            # Safety clip retained as a backstop; with soft bounds it should
+            # rarely if ever bind.
+            np.clip(W, -w_max, w_max, out=W)
 
         g_exc -= (g_exc / tau_syn) * dt
         g_inh_v -= (g_inh_v / tau_syn) * dt
@@ -257,6 +286,10 @@ def main():
     # --- STDP ---
     p.add_argument('--a-plus', type=float, default=0.002, help='STDP potentiation rate')
     p.add_argument('--a-minus', type=float, default=0.002, help='STDP depression rate')
+    p.add_argument('--w-max-mult', type=float, default=4.0,
+                   help='soft-bound ceiling for |W| as a multiple of the initial peak '
+                        'weight (w_max = w_max_mult * w_scale). Must be > 1 to leave '
+                        'headroom for potentiation; ~3-5 is sensible.')
     p.add_argument('--outdir', type=str, default='results')
     p.add_argument('--no-spikes', action='store_true',
                    help='skip spike recording (saves memory; also disables regime stats)')
@@ -287,6 +320,7 @@ def main():
         I_spread=args.I_spread,
         sigma=args.sigma, R=args.R,
         A_plus=args.a_plus, A_minus=args.a_minus, g_inh=args.g_inh,
+        w_max_mult=args.w_max_mult,
     )
 
     npz_path = os.path.join(args.outdir, f'run_{tag}.npz')
@@ -301,10 +335,20 @@ def main():
         counts = np.bincount(spikes[:, 1].astype(int), minlength=args.N)
         rates = counts / sim_s
         pop_cv, isi_cv = regime_metrics(spikes, args.N, args.steps, args.dt)
+        # Runaway guard: a few neurons pinned near the refractory ceiling (max
+        # rate >> mean rate) inflate ISI_CV via burst-like interval clumping and
+        # masquerade as "irregular". A genuine AI state has max rate only a small
+        # multiple of the mean. Flag when that ratio is large so the verdict
+        # can't be fooled by streak/runaway neurons.
+        rate_ratio = rates.max() / rates.mean() if rates.mean() > 0 else float('inf')
+        runaway = rate_ratio > 10.0
+        ai_ish = (pop_cv < 0.5) and (isi_cv > 0.5) and not runaway
         print(f'[stats] mean_rate={rates.mean():.2f} Hz  max={rates.max():.2f} Hz  '
               f'silent={int((rates == 0).sum())}/{args.N}', flush=True)
         print(f'[stats] pop_CV={pop_cv:.3f} (low=async)  ISI_CV={isi_cv:.2f} (high=irregular)  '
-              f'-> {"AI-ish" if (pop_cv < 0.5 and isi_cv > 0.5) else "not AI"}', flush=True)
+              f'max/mean={rate_ratio:.1f}'
+              f'{" RUNAWAY" if runaway else ""}  '
+              f'-> {"AI-ish" if ai_ish else "not AI"}', flush=True)
     else:
         print('[stats] NO SPIKES recorded (network silent, or --no-spikes set)', flush=True)
     mask = W_initial != 0
