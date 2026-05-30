@@ -123,7 +123,20 @@ def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
     # Soft-bound ceiling for |W|. Must exceed the initial peak weight (w_scale)
     # or synapses start at the ceiling with no room to potentiate. w_max_mult is
     # how many times the initial peak the ceiling sits at.
-    w_max = w_max_mult * w_scale
+    #
+    # PER-POPULATION ceiling. Inhibitory weights are initialised at magnitudes up
+    # to g_inh*w_scale (see W[n_exc:, :] *= -g_inh above), which is g_inh times
+    # the excitatory peak. A single scalar ceiling of w_max_mult*w_scale sits
+    # BELOW the inhibitory starting magnitudes, so the clip/soft-bound slams every
+    # inhibitory synapse onto the excitatory rail and the whole inhibitory
+    # population collapses onto one value (a delta spike in the weight histogram).
+    # The ceiling therefore has to be scaled by g_inh for inhibitory rows.
+    # w_ceiling is indexed by PRESYNAPTIC neuron (the row of W), since the row
+    # determines whether a synapse is excitatory or inhibitory.
+    w_max = w_max_mult * w_scale            # excitatory ceiling (kept for logs)
+    w_ceiling = np.full(N, w_max)
+    w_ceiling[n_exc:] = w_max_mult * g_inh * w_scale
+    w_ceiling_col = w_ceiling[:, None]      # (N,1) for per-row clipping
 
     inv_sqrt_dt = 1.0 / np.sqrt(dt)
 
@@ -203,8 +216,11 @@ def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
             # pushes |W| toward w_max, depression pushes |W| toward 0.
             #   headroom = (w_max - |W|)  -> ~0 near the ceiling, kills potentiation
             #   |W|                       -> ~0 near zero,        kills depression
+            # W[:, i] is the column of synapses INTO neuron i, indexed by the
+            # presynaptic neuron (row j). w_ceiling is also indexed by row j, so
+            # each synapse potentiates toward its own population's ceiling.
             sign_col = np.sign(W[:, i])
-            head_col = (w_max - np.abs(W[:, i]))
+            head_col = (w_ceiling - np.abs(W[:, i]))
             W[:, i] += A_plus * decay * head_col * sign_col * (W[:, i] != 0)
 
             sign_row = np.sign(W[i, :])
@@ -213,8 +229,9 @@ def run(N=100, warmup=2000, steps=3000, dt=0.1, seed=0,
 
             last_spike[i] = t_now
             # Safety clip retained as a backstop; with soft bounds it should
-            # rarely if ever bind.
-            np.clip(W, -w_max, w_max, out=W)
+            # rarely if ever bind. Per-row bounds so inhibitory synapses are
+            # clipped to their (larger) ceiling, not the excitatory one.
+            np.clip(W, -w_ceiling_col, w_ceiling_col, out=W)
 
         g_exc -= (g_exc / tau_syn) * dt
         g_inh_v -= (g_inh_v / tau_syn) * dt
