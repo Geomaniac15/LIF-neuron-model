@@ -112,17 +112,21 @@ def regime_metrics(spikes, N, steps, dt, bin_ms=5.0):
 # ---------------------------------------------------------------------------
 
 def calibrate_drive(N, n_exc, W, tau_m, tau_syn, V_th, I_base_template,
-                    sigma, R, dt, target_rate_hz=(5.0, 25.0),
+                    sigma, R, dt, adapt_b=0.0, tau_w=400.0,
+                    target_rate_hz=(5.0, 25.0),
                     calib_steps=3000, seed=1):
     '''Binary-search I_mean so the population fires in target_rate_hz range.
 
     Returns a calibrated I_base array (per-neuron, same shape as I_base_template).
-    Operates on a copy of the network state; does not mutate W.
+    Operates on a copy of the network state; does not mutate W. Adaptation
+    (adapt_b/tau_w) is included so the calibrated rate matches the training run.
     '''
     rng = np.random.default_rng(seed)
     inv_sqrt_dt = 1.0 / np.sqrt(dt)
     E_exc, E_inh = 0.0, -80.0
     V_rest, V_reset = -70.0, -80.0
+    adapt_on    = adapt_b > 0.0
+    adapt_decay = np.exp(-dt / tau_w)
 
     lo, hi = 0.5, 8.0   # search range for I_mean
     for _ in range(12):  # 12 bisection iterations -> resolution < 0.01
@@ -132,14 +136,17 @@ def calibrate_drive(N, n_exc, W, tau_m, tau_syn, V_th, I_base_template,
         V = np.full(N, V_rest)
         g_exc_c = np.zeros(N); g_inh_c = np.zeros(N)
         refractory = np.zeros(N)
+        w_adapt = np.zeros(N)
         n_spikes = 0
 
         for step in range(calib_steps):
             I_ext = I_base + (sigma * rng.standard_normal(N) * inv_sqrt_dt
                               if sigma > 0 else 0.0)
             I_syn = -g_exc_c * (V - E_exc) - g_inh_c * (V - E_inh)
-            dV    = (1.0 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn))
+            dV    = (1.0 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn) - w_adapt)
             V    += dV * dt
+            if adapt_on:
+                np.clip(V, E_inh - 10.0, E_exc + 10.0, out=V)
             refractory -= dt
             fired = (V >= V_th) & (refractory <= 0)
             V[fired] = V_reset; refractory[fired] = 2.0
@@ -149,6 +156,9 @@ def calibrate_drive(N, n_exc, W, tau_m, tau_syn, V_th, I_base_template,
             if inh_f.any(): g_inh_c += W[inh_f].sum(axis=0)
             g_exc_c -= (g_exc_c / tau_syn) * dt
             g_inh_c -= (g_inh_c / tau_syn) * dt
+            if adapt_on:
+                w_adapt *= adapt_decay
+                w_adapt[fired] += adapt_b
             n_spikes += fired.sum()
 
         sim_s    = calib_steps * dt / 1000.0
@@ -178,8 +188,10 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
         tau_syn=20.0,
         tau_stdp=20.0,
         tau_elig=500.0,
+        adapt_b=4.0,
+        tau_w=400.0,
         eta_rstdp=5e-5,
-        eta_readout=1e-3,
+        rls_alpha=1.0,
         target_delay=33,
         hold=150,
         n_input=100,
@@ -229,14 +241,18 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
     # silent at 20ms. Run a quick binary search to find I_mean that gives
     # 5-25 Hz mean population rate, then use it for the full run.
     I_base = calibrate_drive(N, n_exc, W, tau_m, tau_syn, V_th, I_base,
-                             sigma, R, dt, target_rate_hz=(5.0, 25.0),
+                             sigma, R, dt, adapt_b=adapt_b, tau_w=tau_w,
+                             target_rate_hz=(5.0, 25.0),
                              calib_steps=3000, seed=seed + 99)
 
-    # --- readout layer ---
+    # --- readout layer (RLS / FORCE, with bias unit) ---
     pool        = np.arange(n_input, N)
     n_ro        = min(n_readout, len(pool))
     readout_idx = np.sort(rng.choice(pool, size=n_ro, replace=False))
-    W_out       = np.zeros(n_ro)
+    ro_dim      = n_ro + 1                       # +1 for bias feature
+    W_out       = np.zeros(ro_dim)
+    P_rls       = np.eye(ro_dim) / rls_alpha     # inverse-correlation estimate
+    r_vec       = np.ones(ro_dim)                # reused feature vector (last = bias)
 
     # --- circular buffer for delayed input ---
     # Buffer length must be at least target_delay + 1 reservoir-steps.
@@ -253,6 +269,11 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
     tau_state   = 20.0
     trace_decay = np.exp(-dt / tau_state)
     spike_trace = np.zeros(N)
+
+    # --- spike-frequency adaptation (gives the reservoir baseline memory) ---
+    adapt_on    = adapt_b > 0.0
+    adapt_decay = np.exp(-dt / tau_w)
+    w_adapt     = np.zeros(N)
 
     # --- STDP traces and eligibility ---
     stdp_decay  = np.exp(-dt / tau_stdp)
@@ -280,8 +301,9 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
     print(f'[train] {n_rsteps} reservoir-steps ({total_sim_steps} sim steps)  '
           f'target_delay={target_delay} ({target_delay * hold * dt:.0f}ms)  '
           f'hold={hold}  n_ro={n_ro}', flush=True)
-    print(f'[train] eta_rstdp={eta_rstdp}  eta_readout={eta_readout}  '
-          f'tau_elig={tau_elig}ms  tau_stdp={tau_stdp}ms', flush=True)
+    print(f'[train] eta_rstdp={eta_rstdp}  rls_alpha={rls_alpha}  '
+          f'tau_elig={tau_elig}ms  tau_stdp={tau_stdp}ms  '
+          f'adapt_b={adapt_b} tau_w={tau_w}ms', flush=True)
 
     # -----------------------------------------------------------------------
     # Warmup: settle network, no plasticity
@@ -291,8 +313,10 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
         I_ext = I_base + (sigma * rng.standard_normal(N) * inv_sqrt_dt
                           if sigma > 0 else 0.0)
         I_syn = -g_exc * (V - E_exc) - g_inh_v * (V - E_inh)
-        dV    = (1.0 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn))
+        dV    = (1.0 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn) - w_adapt)
         V    += dV * dt
+        if adapt_on:
+            np.clip(V, E_inh - 10.0, E_exc + 10.0, out=V)
         refractory -= dt
         fired = (V >= V_th) & (refractory <= 0)
         V[fired] = V_reset; refractory[fired] = 2.0
@@ -302,6 +326,9 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
         if inh_f.any(): g_inh_v += W[inh_f].sum(axis=0)
         g_exc   -= (g_exc   / tau_syn) * dt
         g_inh_v -= (g_inh_v / tau_syn) * dt
+        if adapt_on:
+            w_adapt *= adapt_decay
+            w_adapt[fired] += adapt_b
         spike_trace = spike_trace * trace_decay + fired.astype(float)
 
     W_initial = W.copy()   # snapshot after warmup settling, before plasticity
@@ -323,8 +350,10 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
             I_ext[:n_input] += input_scale * current_u
 
             I_syn = -g_exc * (V - E_exc) - g_inh_v * (V - E_inh)
-            dV    = (1.0 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn))
+            dV    = (1.0 / tau_m) * (-(V - V_rest) + R * (I_ext + I_syn) - w_adapt)
             V    += dV * dt
+            if adapt_on:
+                np.clip(V, E_inh - 10.0, E_exc + 10.0, out=V)
             refractory -= dt
             fired = (V >= V_th) & (refractory <= 0)
             V[fired] = V_reset; refractory[fired] = 2.0
@@ -335,6 +364,9 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
             if inh_f.any(): g_inh_v += W[inh_f].sum(axis=0)
             g_exc   -= (g_exc   / tau_syn) * dt
             g_inh_v -= (g_inh_v / tau_syn) * dt
+            if adapt_on:
+                w_adapt *= adapt_decay
+                w_adapt[fired] += adapt_b
 
             spike_trace = spike_trace * trace_decay + fired.astype(float)
 
@@ -367,17 +399,22 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
             target_ptr = (buf_ptr - target_delay - 1) % buf_len
             u_target   = u_buf[target_ptr]
 
-            ro_state   = spike_trace[readout_idx]
-            prediction = float(W_out @ ro_state)
-            error      = u_target - prediction
-            d_signal   = error
+            r_vec[:n_ro] = spike_trace[readout_idx]   # last entry stays 1.0 (bias)
+            prediction   = float(W_out @ r_vec)
+            error        = u_target - prediction
+            d_signal     = error
 
             errors.append(abs(error))
 
-            # delta rule: readout
-            W_out += eta_readout * error * ro_state
+            # RLS / FORCE readout update (recursive least squares).
+            # Far stronger conditioning than plain LMS, so d_signal is a
+            # meaningful teaching signal almost immediately.
+            Pr   = P_rls @ r_vec
+            gain = Pr / (1.0 + float(r_vec @ Pr))
+            W_out += error * gain
+            P_rls -= np.outer(gain, Pr)
 
-            # R-STDP: recurrent weights
+            # R-STDP: recurrent weights, gated by the readout error d_signal
             dW = eta_rstdp * e_elig * d_signal * mask_f
             W += dW
 
@@ -438,8 +475,16 @@ def main():
     p.add_argument('--tau-elig', type=float, default=500.0,
                    help='eligibility trace time constant (ms). Must be >= '
                         'target_delay * hold * dt = target memory horizon.')
+    p.add_argument('--adapt-b', type=float, default=4.0,
+                   help='spike-frequency adaptation strength. Gives the reservoir '
+                        'baseline memory for R-STDP to shape. 0 disables it.')
+    p.add_argument('--tau-w', type=float, default=400.0,
+                   help='adaptation time constant (ms). 400 was the proven '
+                        'memory sweet spot in reservoir_capacity.py.')
     p.add_argument('--eta-rstdp', type=float, default=5e-5)
-    p.add_argument('--eta-readout', type=float, default=1e-3)
+    p.add_argument('--rls-alpha', type=float, default=1.0,
+                   help='RLS readout regulariser (P0 = I/alpha). Smaller = faster '
+                        'but noisier adaptation of the readout/teaching signal.')
     p.add_argument('--target-delay', type=int, default=33,
                    help='delay in reservoir-steps. 33 x 150 x 0.1ms = 495ms. '
                         'Use --target-delay 5 for local sanity checks.')
@@ -462,7 +507,7 @@ def main():
           f'{args.steps} reservoir-steps ({sim_steps} sim steps)  '
           f'target_delay={args.target_delay} ({args.target_delay*args.hold*args.dt:.0f}ms)  '
           f'tau_syn={args.tau_syn}ms tau_m=[{args.tau_m_min},{args.tau_m_max}]ms  '
-          f'eta_rstdp={args.eta_rstdp} eta_readout={args.eta_readout}', flush=True)
+          f'eta_rstdp={args.eta_rstdp} adapt_b={args.adapt_b} tau_w={args.tau_w}', flush=True)
 
     W_initial, W_final, spikes, errors, W_out, readout_idx = run(
         N=args.N, warmup_steps=args.warmup, n_rsteps=args.steps,
@@ -473,7 +518,8 @@ def main():
         g_inh=args.g_inh, w_max_mult=args.w_max_mult,
         tau_m_min=args.tau_m_min, tau_m_max=args.tau_m_max, tau_syn=args.tau_syn,
         tau_stdp=args.tau_stdp, tau_elig=args.tau_elig,
-        eta_rstdp=args.eta_rstdp, eta_readout=args.eta_readout,
+        adapt_b=args.adapt_b, tau_w=args.tau_w,
+        eta_rstdp=args.eta_rstdp, rls_alpha=args.rls_alpha,
         target_delay=args.target_delay, hold=args.hold,
         n_input=args.n_input, input_scale=args.input_scale,
         n_readout=args.n_readout,
