@@ -1,0 +1,30 @@
+[seed 8] host=hex-p3-c3 started=Sun 31 May 15:47:47 BST 2026
+[seed 8] weights=results_fixed/run_N2000_seed8.npz -> sweep_csv/mem_dual_seed8.csv  (dual readout + slow-channel sweep)
+Sweeping input_scale=[8.0] x inh_scale=[1.0] x n_input=[100] x tau_syn=[5.0] x adapt_b=[4.0] x tau_w=[400.0] x adapt_b2=[0.0, 1.0, 2.0, 3.0] x tau_w2=[800.0, 1500.0, 3000.0] x hold=[150]  (12 cells)
+weights = results_fixed/run_N2000_seed8.npz  (240 reservoir-steps/cell)
+
+ hold  ms/st   adb  tau_w  adb2  tau_w2  input   inh   MC_1  totMC  horiz  reach    separ  end/pk  regime
+-------------------------------------------------------------------------------------------------------------------
+  150   15.0   4.0    400   0.0     800      8   1.0  0.092   0.60      0     30   0.7477    0.57  CRITICAL-ish
+  150   15.0   4.0    400   0.0    1500      8   1.0  0.092   0.60      0     30   0.7477    0.57  CRITICAL-ish
+  150   15.0   4.0    400   0.0    3000      8   1.0  0.092   0.60      0     30   0.7477    0.57  CRITICAL-ish
+  150   15.0   4.0    400   1.0     800      8   1.0  0.121   0.49     15     15   0.7632    0.50  CRITICAL-ish
+  150   15.0   4.0    400   1.0    1500      8   1.0  0.120   0.55     30     30   0.7554    0.31  CRITICAL-ish
+  150   15.0   4.0    400   1.0    3000      8   1.0  0.149   0.47     15     15   0.7089    0.34  CRITICAL-ish
+  150   15.0   4.0    400   2.0     800      8   1.0  0.139   0.50     30     30   0.6655    0.59  CRITICAL-ish
+  150   15.0   4.0    400   2.0    1500      8   1.0  0.128   0.47     15     15   0.7844    0.75  CRITICAL-ish
+  150   15.0   4.0    400   2.0    3000      8   1.0  0.102   0.43     15     15   0.7250    0.42  CRITICAL-ish
+  150   15.0   4.0    400   3.0     800      8   1.0  0.141   0.62     30     30   0.7559    0.33  CRITICAL-ish
+  150   15.0   4.0    400   3.0    1500      8   1.0  0.073   0.45      0      0   0.6302    0.49  CRITICAL-ish
+  150   15.0   4.0    400   3.0    3000      8   1.0  0.079   0.37      0      0   0.7045    0.38  CRITICAL-ish
+
+Deepest recall among non-chaotic cells: hold=150 (15ms/step) adapt_b=4.0/tau_w=400 adapt_b2=3.0/tau_w2=800 input_scale=8  reach=30ms horizon=30ms totalMC=0.62 (CRITICAL-ish)
+CSV saved to sweep_csv/mem_dual_seed8.csv
+
+Plot saved to plots/mem_dual_seed8.png
+
+Reading it: the slow second channel (adapt_b2 with tau_w2 ~1-2 s) should
+push REACH (deepest recall, solid) and total MC past the ~30 ms single-
+channel ceiling. The contiguous horizon (dashed) may lag if memory dips
+then recovers. Keep cells whose regime stays FADING / CRITICAL (not CHAOTIC).
+[seed 8] finished=Sun 31 May 15:49:38 BST 2026
