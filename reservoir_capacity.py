@@ -7,8 +7,7 @@ properties that decide whether it is a useful reservoir at all:
      ask a linear readout to reconstruct that input delayed by k reservoir-steps,
      for k = 1..max_delay. MC_k = R^2 of the best linear reconstruction on held-out
      data; total MC = sum_k MC_k. This is how many past inputs the network still
-     holds in its state. Generated on the fly, so the cat/cap data scarcity that
-     sank the speech task is irrelevant here.
+     holds in its state. 
 
   2. PERTURBATION DIVERGENCE (edge of chaos / fading memory). Run the reservoir
      twice on input streams that are identical except for a single perturbed value
@@ -75,6 +74,30 @@ def parse_args():
     p.add_argument('--tau-state', type=float, default=20.0,
                    help='time constant (ms) of the leaky spike trace used as the '
                         'continuous reservoir state for the linear readout.')
+    # --- intrinsic time constants (the real memory-horizon knobs) ---
+    p.add_argument('--tau-syn', type=float, default=5.0,
+                   help='synaptic decay (ms). The single biggest memory lever: longer '
+                        'tau_syn makes each input spike linger, so echoes persist and '
+                        'the recall horizon stretches. Trained default was 5 ms. NOT '
+                        'baked into W, so changing it needs no retraining.')
+    p.add_argument('--tau-m-min', type=float, default=15.0,
+                   help='lower end of the per-neuron membrane time constant (ms).')
+    p.add_argument('--tau-m-max', type=float, default=25.0,
+                   help='upper end of the per-neuron membrane time constant (ms). '
+                        'Raise both ends (e.g. 50-100) to integrate over longer '
+                        'windows and extend memory.')
+    # --- spike-triggered adaptation: the real long-memory channel ---
+    p.add_argument('--adapt-b', type=float, default=0.0,
+                   help='spike-triggered adaptation increment. Each spike bumps a '
+                        'slow per-neuron current w_adapt by this amount; w_adapt then '
+                        'decays with tau_w and is subtracted from the membrane drive. '
+                        'This adds a long memory trace ORTHOGONAL to the fast synapse, '
+                        'so unlike raising tau_syn it does not blur successive inputs. '
+                        '0 = off (matches the trained network). Try 0.5-3.')
+    p.add_argument('--tau-w', type=float, default=150.0,
+                   help='adaptation time constant (ms). This is the memory-horizon '
+                        'knob: 100-300 ms gives a slow echo that outlasts the 5 ms '
+                        'synapse and ~20 ms membrane. Only matters when --adapt-b > 0.')
     p.add_argument('--n-state', type=int, default=600,
                    help='number of readout neurons subsampled into the state vector '
                         '(keeps the ridge solve fast on big networks).')
@@ -96,12 +119,34 @@ def parse_args():
                    help='comma-separated input-scale grid for --sweep.')
     p.add_argument('--sweep-inh-scales', default='1.0,0.6',
                    help='comma-separated inh-scale grid for --sweep.')
+    p.add_argument('--sweep-n-inputs', default='',
+                   help='optional comma-separated grid of input-neuron counts for '
+                        '--sweep (e.g. "100,300,500"). Tests whether widening the '
+                        'input footprint lifts separation. Empty = just use --n-input.')
+    p.add_argument('--sweep-tau-syns', default='',
+                   help='optional comma-separated grid of synaptic time constants (ms) '
+                        'for --sweep (e.g. "5,20,50,100"). Empty = just use --tau-syn. '
+                        'NOTE: raising tau_syn alone trades memory for separation and '
+                        'blurs inputs; use --sweep-adapt-bs for genuine long memory.')
+    p.add_argument('--sweep-adapt-bs', default='',
+                   help='optional comma-separated grid of adaptation increments for '
+                        '--sweep (e.g. "0,0.5,1,2"). The recommended long-memory lever. '
+                        'Empty = just use --adapt-b.')
+    p.add_argument('--sweep-tau-ws', default='',
+                   help='optional comma-separated grid of adaptation time constants (ms) '
+                        'for --sweep (e.g. "100,200,400"). Empty = just use --tau-w.')
+    p.add_argument('--sweep-max-delay', type=int, default=12,
+                   help='largest delay k probed for memory per sweep cell. Raise it '
+                        'when chasing long memory so the horizon is not truncated.')
     p.add_argument('--sweep-steps', type=int, default=18000,
                    help='MC-run length per sweep cell (shorter than the full run).')
     p.add_argument('--sweep-sep-steps', type=int, default=6000,
                    help='separation/divergence run length per sweep cell.')
     p.add_argument('--sweep-streams', type=int, default=6,
                    help='number of streams for separation per sweep cell.')
+    p.add_argument('--sweep-csv', default='',
+                   help='optional path to write per-cell sweep results as CSV '
+                        '(recommended on the cluster so array tasks save clean data).')
     return p.parse_args()
 
 
@@ -144,14 +189,15 @@ def build_network(args):
     rng = np.random.default_rng(args.seed)
     params = dict(
         N=N, n_exc=n_exc, W=W,
-        tau_m=rng.uniform(15, 25, N),
-        tau_syn=5.0, R=10.0,
+        tau_m=rng.uniform(args.tau_m_min, args.tau_m_max, N),
+        tau_syn=args.tau_syn, R=10.0,
         V_rest=-70.0,
         V_threshold=rng.uniform(-57, -53, N),
         V_reset=-80.0,
         E_exc=0.0, E_inh=-80.0,
         I_ext=rng.uniform(args.background_mean - args.background_spread,
                           args.background_mean + args.background_spread, N),
+        adapt_b=args.adapt_b, tau_w=args.tau_w,
     )
     return params
 
@@ -168,6 +214,7 @@ def simulate(params, drive, args, record_every, readout_idx):
     tau_m = params['tau_m']; tau_syn = params['tau_syn']; R = params['R']
     V_rest = params['V_rest']; V_th = params['V_threshold']; V_reset = params['V_reset']
     E_exc = params['E_exc']; E_inh = params['E_inh']; I_ext = params['I_ext']
+    adapt_b = params['adapt_b']; tau_w = params['tau_w']
     dt = args.dt
     steps = drive.shape[0]
 
@@ -177,6 +224,9 @@ def simulate(params, drive, args, record_every, readout_idx):
     refractory = np.zeros(N)
     trace = np.zeros(N)                 # leaky spike trace = continuous state
     trace_decay = np.exp(-dt / args.tau_state)
+    w_adapt = np.zeros(N)               # slow spike-triggered adaptation current
+    adapt_on = adapt_b > 0.0
+    adapt_decay = np.exp(-dt / tau_w)
 
     n_records = steps // record_every
     states = np.zeros((n_records, len(readout_idx)))
@@ -186,13 +236,22 @@ def simulate(params, drive, args, record_every, readout_idx):
         current_I = I_ext + drive[step]
 
         I_syn = -g_exc * (V - E_exc) - g_inh * (V - E_inh)
-        dV = (1.0 / tau_m) * (-(V - V_rest) + R * (current_I + I_syn))
+        dV = (1.0 / tau_m) * (-(V - V_rest) + R * (current_I + I_syn) - w_adapt)
         V += dV * dt
+        if adapt_on:
+            # physiological clamp, ONLY on the adaptation path so the adapt-off network
+            # stays byte-identical to speech_reservoir_fixed.py. Guards the explicit-
+            # Euler step from a transient runaway when a large w_adapt hyperpolarises V.
+            np.clip(V, E_inh - 10.0, E_exc + 10.0, out=V)
         refractory -= dt
+        if adapt_on:
+            w_adapt *= adapt_decay      # slow decay between spikes
 
         spikes = (V >= V_th) & (refractory <= 0)
         V[spikes] = V_reset
         refractory[spikes] = 2.0
+        if adapt_on:
+            w_adapt[spikes] += adapt_b  # each spike loads the slow current
 
         trace *= trace_decay
         trace[spikes] += 1.0
@@ -309,67 +368,141 @@ def separation(params, args, readout_idx):
     return float(dists.mean()), float(dists.std())
 
 
+def memory_horizon(per_delay, args, thresh=0.1):
+    '''Last delay k (1-indexed) whose MC stays >= thresh = the recall horizon.
+    Returns (horizon_k, horizon_ms).'''
+    horizon_k = 0
+    for i, v in enumerate(per_delay):
+        if v >= thresh:
+            horizon_k = i + 1
+        else:
+            break
+    return horizon_k, horizon_k * args.hold * args.dt
+
+
 def run_sweep(args):
-    '''Sweep input-scale x inh-scale; report MC_1, separation and regime per cell.'''
+    '''Sweep input-scale x inh-scale x optional n-input x optional tau-syn.
+    Reports total memory capacity, recall horizon (ms), separation and regime.'''
     input_scales = [float(x) for x in args.sweep_input_scales.split(',') if x.strip()]
     inh_scales = [float(x) for x in args.sweep_inh_scales.split(',') if x.strip()]
-    print(f'Sweeping input_scale={input_scales} x inh_scale={inh_scales}  '
-          f'({len(input_scales) * len(inh_scales)} cells)')
+    n_inputs = ([int(x) for x in args.sweep_n_inputs.split(',') if x.strip()]
+                or [args.n_input])
+    tau_syns = ([float(x) for x in args.sweep_tau_syns.split(',') if x.strip()]
+                or [args.tau_syn])
+    adapt_bs = ([float(x) for x in args.sweep_adapt_bs.split(',') if x.strip()]
+                or [args.adapt_b])
+    tau_ws = ([float(x) for x in args.sweep_tau_ws.split(',') if x.strip()]
+              or [args.tau_w])
+    n_cells = (len(input_scales) * len(inh_scales) * len(n_inputs) * len(tau_syns)
+               * len(adapt_bs) * len(tau_ws))
+    print(f'Sweeping input_scale={input_scales} x inh_scale={inh_scales} '
+          f'x n_input={n_inputs} x tau_syn={tau_syns} x adapt_b={adapt_bs} '
+          f'x tau_w={tau_ws}  ({n_cells} cells)')
     print(f'weights = {args.weights}\n')
-    header = (f'{"input":>6} {"inh":>5} {"MC_1":>6} {"MC_2":>6} {"separation":>11} '
-              f'{"end/peak":>9}  regime')
+    header = (f'{"tau_s":>6} {"adb":>5} {"tau_w":>6} {"n_in":>5} {"input":>6} '
+              f'{"inh":>5} {"MC_1":>6} {"totMC":>6} {"horiz_ms":>8} {"separ":>8} '
+              f'{"end/pk":>7}  regime')
     print(header)
     print('-' * (len(header) + 10))
 
     rows = []
     for inh in inh_scales:
         args.inh_scale = inh
-        params = build_network(args)
-        readout_idx = pick_readout(params, args)
-        for isc in input_scales:
-            args.input_scale = isc
-            # light MC (k=1,2 only)
-            s_steps, s_md = args.steps, args.max_delay
-            args.steps, args.max_delay = args.sweep_steps, 2
-            per_delay, _ = memory_capacity(params, args, readout_idx)
-            args.steps, args.max_delay = s_steps, s_md
-            # light separation + divergence
-            s_ss, s_ns = args.sep_steps, args.sep_streams
-            args.sep_steps, args.sep_streams = args.sweep_sep_steps, args.sweep_streams
-            sep_mean, sep_std = separation(params, args, readout_idx)
-            dist = divergence(params, args, readout_idx)
-            args.sep_steps, args.sep_streams = s_ss, s_ns
-            ratio, regime = classify_regime(dist)
-            print(f'{isc:>6.0f} {inh:>5.1f} {per_delay[0]:>6.3f} {per_delay[1]:>6.3f} '
-                  f'{sep_mean:>11.4f} {ratio:>9.2f}  {regime.split(" (")[0]}')
-            rows.append(dict(input_scale=isc, inh_scale=inh, mc1=per_delay[0],
-                             mc2=per_delay[1], sep=sep_mean, ratio=ratio, regime=regime))
+        params = build_network(args)        # inh is baked into W here
+        for tsyn in tau_syns:
+            params['tau_syn'] = tsyn         # cheap to swap; no rebuild needed
+            for adb in adapt_bs:
+                params['adapt_b'] = adb      # adaptation lives in params, not W
+                for tw in tau_ws:
+                    params['tau_w'] = tw
+                    for n_in in n_inputs:
+                        args.n_input = n_in  # drives make_drive + pick_readout
+                        readout_idx = pick_readout(params, args)
+                        for isc in input_scales:
+                            args.input_scale = isc
+                            # MC up to sweep_max_delay so long memory isn't truncated
+                            s_steps, s_md = args.steps, args.max_delay
+                            args.steps, args.max_delay = (args.sweep_steps,
+                                                          args.sweep_max_delay)
+                            per_delay, total_mc = memory_capacity(params, args,
+                                                                  readout_idx)
+                            args.steps, args.max_delay = s_steps, s_md
+                            hk, hms = memory_horizon(per_delay, args)
+                            # light separation + divergence
+                            s_ss, s_ns = args.sep_steps, args.sep_streams
+                            args.sep_steps, args.sep_streams = (args.sweep_sep_steps,
+                                                                args.sweep_streams)
+                            sep_mean, sep_std = separation(params, args, readout_idx)
+                            dist = divergence(params, args, readout_idx)
+                            args.sep_steps, args.sep_streams = s_ss, s_ns
+                            ratio, regime = classify_regime(dist)
+                            print(f'{tsyn:>6.0f} {adb:>5.1f} {tw:>6.0f} {n_in:>5} '
+                                  f'{isc:>6.0f} {inh:>5.1f} {per_delay[0]:>6.3f} '
+                                  f'{total_mc:>6.2f} {hms:>8.0f} {sep_mean:>8.4f} '
+                                  f'{ratio:>7.2f}  {regime.split(" (")[0]}')
+                            rows.append(dict(tau_syn=tsyn, adapt_b=adb, tau_w=tw,
+                                             n_input=n_in, input_scale=isc,
+                                             inh_scale=inh, mc1=per_delay[0],
+                                             total_mc=total_mc, horizon_ms=hms,
+                                             sep=sep_mean, ratio=ratio, regime=regime))
 
     usable = [r for r in rows if 'CHAOTIC' not in r['regime']]
     if usable:
-        best = max(usable, key=lambda r: r['sep'])
-        print(f'\nBest separation among non-chaotic cells: input_scale={best["input_scale"]:.0f} '
-              f'inh_scale={best["inh_scale"]:.1f}  separation={best["sep"]:.3f} '
-              f'MC_1={best["mc1"]:.3f} ({best["regime"].split(" (")[0]})')
+        best = max(usable, key=lambda r: r['horizon_ms'])
+        print(f'\nLongest recall among non-chaotic cells: tau_syn={best["tau_syn"]:.0f}ms '
+              f'adapt_b={best["adapt_b"]:.1f} tau_w={best["tau_w"]:.0f}ms '
+              f'n_input={best["n_input"]} input_scale={best["input_scale"]:.0f} '
+              f'inh_scale={best["inh_scale"]:.1f}  horizon={best["horizon_ms"]:.0f}ms '
+              f'totalMC={best["total_mc"]:.2f} ({best["regime"].split(" (")[0]})')
 
-    # plot separation vs input-scale, one line per inh-scale
+    if args.sweep_csv:
+        import csv as _csv
+        with open(args.sweep_csv, 'w', newline='') as f:
+            w = _csv.DictWriter(f, fieldnames=['tau_syn', 'adapt_b', 'tau_w', 'n_input',
+                                               'input_scale', 'inh_scale', 'mc1',
+                                               'total_mc', 'horizon_ms', 'sep', 'ratio',
+                                               'regime'])
+            w.writeheader()
+            w.writerows(rows)
+        print(f'CSV saved to {args.sweep_csv}')
+
+    # plot recall horizon + total MC vs the primary swept lever. Preference order:
+    # adaptation (the real long-memory channel) > tau_w > tau_syn > input-scale.
+    if len(adapt_bs) > 1:
+        xkey, xlabel = 'adapt_b', 'adaptation increment b'
+    elif len(tau_ws) > 1:
+        xkey, xlabel = 'tau_w', 'tau_w (ms)'
+    elif len(tau_syns) > 1:
+        xkey, xlabel = 'tau_syn', 'tau_syn (ms)'
+    else:
+        xkey, xlabel = 'input_scale', 'input-scale'
+    group_keys = [k for k in ('inh_scale', 'n_input', 'tau_syn', 'adapt_b', 'tau_w',
+                              'input_scale') if k != xkey]
     fig, ax = plt.subplots(1, 2, figsize=(11, 4))
-    for inh in inh_scales:
-        cells = [r for r in rows if r['inh_scale'] == inh]
-        xs = [r['input_scale'] for r in cells]
-        ax[0].plot(xs, [r['sep'] for r in cells], 'o-', label=f'inh={inh:.1f}')
-        ax[1].plot(xs, [r['mc1'] for r in cells], 'o-', label=f'inh={inh:.1f}')
-    ax[0].set_xlabel('input-scale'); ax[0].set_ylabel('separation (per dim)')
-    ax[0].set_title('Separation vs drive'); ax[0].legend()
-    ax[1].set_xlabel('input-scale'); ax[1].set_ylabel('MC_1')
-    ax[1].set_title('Short-term memory vs drive'); ax[1].legend()
-    fig.suptitle(f'{args.weights}  separation/MC sweep')
+    seen = set()
+    for r in rows:
+        combo = tuple(r[k] for k in group_keys)
+        if combo in seen:
+            continue
+        seen.add(combo)
+        cells = sorted([c for c in rows
+                        if all(c[k] == v for k, v in zip(group_keys, combo))],
+                       key=lambda c: c[xkey])
+        lab = ', '.join(f'{k.split("_")[0]}={v:g}' for k, v in zip(group_keys, combo))
+        xs = [c[xkey] for c in cells]
+        ax[0].plot(xs, [c['horizon_ms'] for c in cells], 'o-', label=lab)
+        ax[1].plot(xs, [c['total_mc'] for c in cells], 'o-', label=lab)
+    ax[0].set_xlabel(xlabel); ax[0].set_ylabel('recall horizon (ms)')
+    ax[0].set_title('Memory horizon'); ax[0].legend(fontsize=6)
+    ax[1].set_xlabel(xlabel); ax[1].set_ylabel('total memory capacity')
+    ax[1].set_title('Total MC'); ax[1].legend(fontsize=6)
+    fig.suptitle(f'{args.weights}  memory sweep')
     fig.tight_layout(); fig.savefig(args.plot, dpi=120)
     print(f'\nPlot saved to {args.plot}')
-    print('\nReading it: you want separation to climb (different inputs -> different')
-    print('states) while the regime stays out of CHAOTIC. That cell is where this')
-    print('brain becomes usable as a classifier substrate. If separation never rises,')
-    print('the input block (100/2000 neurons) is too small a foothold: raise --n-input.')
+    print('\nReading it: turning on adaptation (adapt_b > 0) with tau_w ~100-300 ms')
+    print('should push the recall horizon up WITHOUT collapsing total MC the way')
+    print('raising tau_syn did. Take the longest horizon whose regime is still FADING')
+    print('MEMORY or CRITICAL-ish (not CHAOTIC); those adapt_b/tau_w are your settings.')
 
 
 def main():
