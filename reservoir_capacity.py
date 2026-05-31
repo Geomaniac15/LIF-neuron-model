@@ -74,6 +74,13 @@ def parse_args():
     p.add_argument('--tau-state', type=float, default=20.0,
                    help='time constant (ms) of the leaky spike trace used as the '
                         'continuous reservoir state for the linear readout.')
+    p.add_argument('--tau-state2', type=float, default=0.0,
+                   help='if > 0, add a SECOND, slower readout trace with this time '
+                        'constant (ms) and concatenate it to the fast one, so the '
+                        'linear readout sees fast detail AND slow context as separate '
+                        'features. A single trace cannot hold both; this is the lever '
+                        'that lets a longer reach show up in the readout. Try 200-800. '
+                        '0 = off (single fast trace, original behaviour).')
     # --- intrinsic time constants (the real memory-horizon knobs) ---
     p.add_argument('--tau-syn', type=float, default=5.0,
                    help='synaptic decay (ms). The single biggest memory lever: longer '
@@ -98,6 +105,19 @@ def parse_args():
                    help='adaptation time constant (ms). This is the memory-horizon '
                         'knob: 100-300 ms gives a slow echo that outlasts the 5 ms '
                         'synapse and ~20 ms membrane. Only matters when --adapt-b > 0.')
+    # --- SECOND, much slower adaptation channel: the lever past the ~30 ms ceiling ---
+    p.add_argument('--adapt-b2', type=float, default=0.0,
+                   help='spike-triggered increment for a SECOND adaptation current '
+                        'with its own (much longer) time constant --tau-w2. Runs '
+                        'alongside the fast channel: the fast one keeps per-step '
+                        'detail, this slow one carries a long context trace. A single '
+                        'channel caps the recall horizon at ~30 ms; this is the lever '
+                        'meant to push past it. 0 = off. Try 0.5-3.')
+    p.add_argument('--tau-w2', type=float, default=1000.0,
+                   help='time constant (ms) of the second adaptation channel. Make it '
+                        'far slower than --tau-w (e.g. 1000-2000 ms) so it adds memory '
+                        'at long delays instead of duplicating the fast channel. Only '
+                        'matters when --adapt-b2 > 0.')
     p.add_argument('--n-state', type=int, default=600,
                    help='number of readout neurons subsampled into the state vector '
                         '(keeps the ridge solve fast on big networks).')
@@ -135,6 +155,13 @@ def parse_args():
     p.add_argument('--sweep-tau-ws', default='',
                    help='optional comma-separated grid of adaptation time constants (ms) '
                         'for --sweep (e.g. "100,200,400"). Empty = just use --tau-w.')
+    p.add_argument('--sweep-adapt-b2s', default='',
+                   help='optional comma-separated grid of SECOND-channel increments for '
+                        '--sweep (e.g. "0,0.5,1,2"). The lever past the ~30 ms ceiling. '
+                        'Empty = just use --adapt-b2.')
+    p.add_argument('--sweep-tau-w2s', default='',
+                   help='optional comma-separated grid of SECOND-channel time constants '
+                        '(ms) for --sweep (e.g. "800,1500,3000"). Empty = use --tau-w2.')
     p.add_argument('--sweep-holds', default='',
                    help='optional comma-separated grid of hold values (sim steps per '
                         'reservoir-step) for --sweep (e.g. "150,250,400"). Bigger hold '
@@ -205,6 +232,7 @@ def build_network(args):
         I_ext=rng.uniform(args.background_mean - args.background_spread,
                           args.background_mean + args.background_spread, N),
         adapt_b=args.adapt_b, tau_w=args.tau_w,
+        adapt_b2=args.adapt_b2, tau_w2=args.tau_w2,
     )
     return params
 
@@ -222,6 +250,7 @@ def simulate(params, drive, args, record_every, readout_idx):
     V_rest = params['V_rest']; V_th = params['V_threshold']; V_reset = params['V_reset']
     E_exc = params['E_exc']; E_inh = params['E_inh']; I_ext = params['I_ext']
     adapt_b = params['adapt_b']; tau_w = params['tau_w']
+    adapt_b2 = params['adapt_b2']; tau_w2 = params['tau_w2']
     dt = args.dt
     steps = drive.shape[0]
 
@@ -231,19 +260,26 @@ def simulate(params, drive, args, record_every, readout_idx):
     refractory = np.zeros(N)
     trace = np.zeros(N)                 # leaky spike trace = continuous state
     trace_decay = np.exp(-dt / args.tau_state)
-    w_adapt = np.zeros(N)               # slow spike-triggered adaptation current
-    adapt_on = adapt_b > 0.0
+    trace2_on = getattr(args, 'tau_state2', 0.0) > 0.0
+    trace2 = np.zeros(N)                # optional second, slower readout trace
+    trace2_decay = np.exp(-dt / args.tau_state2) if trace2_on else 0.0
+    w_adapt = np.zeros(N)               # fast slow-adaptation current (tau_w)
+    w_adapt2 = np.zeros(N)              # second, much slower channel (tau_w2)
+    adapt_on = (adapt_b > 0.0) or (adapt_b2 > 0.0)
     adapt_decay = np.exp(-dt / tau_w)
+    adapt_decay2 = np.exp(-dt / tau_w2)
 
     n_records = steps // record_every
-    states = np.zeros((n_records, len(readout_idx)))
+    width = len(readout_idx) * (2 if trace2_on else 1)
+    states = np.zeros((n_records, width))
     rec = 0
 
     for step in range(steps):
         current_I = I_ext + drive[step]
 
         I_syn = -g_exc * (V - E_exc) - g_inh * (V - E_inh)
-        dV = (1.0 / tau_m) * (-(V - V_rest) + R * (current_I + I_syn) - w_adapt)
+        dV = (1.0 / tau_m) * (-(V - V_rest) + R * (current_I + I_syn)
+                              - w_adapt - w_adapt2)
         V += dV * dt
         if adapt_on:
             # physiological clamp, ONLY on the adaptation path so the adapt-off network
@@ -252,16 +288,21 @@ def simulate(params, drive, args, record_every, readout_idx):
             np.clip(V, E_inh - 10.0, E_exc + 10.0, out=V)
         refractory -= dt
         if adapt_on:
-            w_adapt *= adapt_decay      # slow decay between spikes
+            w_adapt *= adapt_decay      # fast adaptation decay between spikes
+            w_adapt2 *= adapt_decay2    # slow second-channel decay
 
         spikes = (V >= V_th) & (refractory <= 0)
         V[spikes] = V_reset
         refractory[spikes] = 2.0
         if adapt_on:
-            w_adapt[spikes] += adapt_b  # each spike loads the slow current
+            w_adapt[spikes] += adapt_b   # each spike loads the fast slow-current
+            w_adapt2[spikes] += adapt_b2  # ... and the slower second channel
 
         trace *= trace_decay
         trace[spikes] += 1.0
+        if trace2_on:
+            trace2 *= trace2_decay
+            trace2[spikes] += 1.0
 
         exc_fired = spikes.copy(); exc_fired[n_exc:] = False
         inh_fired = spikes.copy(); inh_fired[:n_exc] = False
@@ -273,7 +314,11 @@ def simulate(params, drive, args, record_every, readout_idx):
         g_inh -= (g_inh / tau_syn) * dt
 
         if (step + 1) % record_every == 0 and rec < n_records:
-            states[rec] = trace[readout_idx]
+            if trace2_on:
+                states[rec] = np.concatenate([trace[readout_idx],
+                                              trace2[readout_idx]])
+            else:
+                states[rec] = trace[readout_idx]
             rec += 1
 
     return states[:rec]
@@ -377,6 +422,7 @@ def separation(params, args, readout_idx):
 
 def memory_horizon(per_delay, args, thresh=0.1):
     '''Last delay k (1-indexed) whose MC stays >= thresh = the recall horizon.
+    CONTIGUOUS: stops at the first delay that drops below threshold.
     Returns (horizon_k, horizon_ms).'''
     horizon_k = 0
     for i, v in enumerate(per_delay):
@@ -385,6 +431,16 @@ def memory_horizon(per_delay, args, thresh=0.1):
         else:
             break
     return horizon_k, horizon_k * args.hold * args.dt
+
+
+def memory_reach(per_delay, args, thresh=0.1):
+    '''Deepest delay k (1-indexed) with MC >= thresh, NOT requiring contiguity.
+    A slow channel can add memory at long delays with a dip in between; the
+    contiguous horizon misses that, but reach catches it.
+    Returns (reach_k, reach_ms).'''
+    hits = [i + 1 for i, v in enumerate(per_delay) if v >= thresh]
+    reach_k = hits[-1] if hits else 0
+    return reach_k, reach_k * args.hold * args.dt
 
 
 def run_sweep(args):
@@ -400,6 +456,10 @@ def run_sweep(args):
                 or [args.adapt_b])
     tau_ws = ([float(x) for x in args.sweep_tau_ws.split(',') if x.strip()]
               or [args.tau_w])
+    adapt_b2s = ([float(x) for x in args.sweep_adapt_b2s.split(',') if x.strip()]
+                 or [args.adapt_b2])
+    tau_w2s = ([float(x) for x in args.sweep_tau_w2s.split(',') if x.strip()]
+               or [args.tau_w2])
     holds = ([int(x) for x in args.sweep_holds.split(',') if x.strip()]
              or [args.hold])
     # Hold the reservoir-step COUNT constant across hold values so MC estimates are
@@ -407,14 +467,16 @@ def run_sweep(args):
     mc_rsteps = max(1, args.sweep_steps // holds[0])
     sep_rsteps = max(1, args.sweep_sep_steps // holds[0])
     n_cells = (len(input_scales) * len(inh_scales) * len(n_inputs) * len(tau_syns)
-               * len(adapt_bs) * len(tau_ws) * len(holds))
+               * len(adapt_bs) * len(tau_ws) * len(adapt_b2s) * len(tau_w2s)
+               * len(holds))
     print(f'Sweeping input_scale={input_scales} x inh_scale={inh_scales} '
           f'x n_input={n_inputs} x tau_syn={tau_syns} x adapt_b={adapt_bs} '
-          f'x tau_w={tau_ws} x hold={holds}  ({n_cells} cells)')
+          f'x tau_w={tau_ws} x adapt_b2={adapt_b2s} x tau_w2={tau_w2s} '
+          f'x hold={holds}  ({n_cells} cells)')
     print(f'weights = {args.weights}  ({mc_rsteps} reservoir-steps/cell)\n')
-    header = (f'{"hold":>5} {"ms/st":>6} {"tau_s":>6} {"adb":>5} {"tau_w":>6} '
-              f'{"n_in":>5} {"input":>6} {"inh":>5} {"MC_1":>6} {"totMC":>6} '
-              f'{"horiz_ms":>8} {"separ":>8} {"end/pk":>7}  regime')
+    header = (f'{"hold":>5} {"ms/st":>6} {"adb":>5} {"tau_w":>6} {"adb2":>5} '
+              f'{"tau_w2":>7} {"input":>6} {"inh":>5} {"MC_1":>6} {"totMC":>6} '
+              f'{"horiz":>6} {"reach":>6} {"separ":>8} {"end/pk":>7}  regime')
     print(header)
     print('-' * (len(header) + 10))
 
@@ -428,67 +490,84 @@ def run_sweep(args):
                 params['adapt_b'] = adb      # adaptation lives in params, not W
                 for tw in tau_ws:
                     params['tau_w'] = tw
-                    for n_in in n_inputs:
-                        args.n_input = n_in  # drives make_drive + pick_readout
-                        readout_idx = pick_readout(params, args)
-                        for isc in input_scales:
-                            args.input_scale = isc
-                            for hld in holds:
-                                args.hold = hld  # ms/reservoir-step = hold * dt
-                                # scale total sim steps so rstep count stays constant
-                                eff_steps = mc_rsteps * hld
-                                eff_sep = sep_rsteps * hld
-                                # MC up to sweep_max_delay so long memory isn't truncated
-                                s_steps, s_md = args.steps, args.max_delay
-                                args.steps, args.max_delay = (eff_steps,
-                                                              args.sweep_max_delay)
-                                per_delay, total_mc = memory_capacity(params, args,
-                                                                      readout_idx)
-                                args.steps, args.max_delay = s_steps, s_md
-                                hk, hms = memory_horizon(per_delay, args)
-                                # light separation + divergence
-                                s_ss, s_ns = args.sep_steps, args.sep_streams
-                                args.sep_steps, args.sep_streams = (eff_sep,
-                                                                    args.sweep_streams)
-                                sep_mean, sep_std = separation(params, args, readout_idx)
-                                dist = divergence(params, args, readout_idx)
-                                args.sep_steps, args.sep_streams = s_ss, s_ns
-                                ratio, regime = classify_regime(dist)
-                                print(f'{hld:>5} {hld * args.dt:>6.1f} {tsyn:>6.0f} '
-                                      f'{adb:>5.1f} {tw:>6.0f} {n_in:>5} {isc:>6.0f} '
-                                      f'{inh:>5.1f} {per_delay[0]:>6.3f} '
-                                      f'{total_mc:>6.2f} {hms:>8.0f} {sep_mean:>8.4f} '
-                                      f'{ratio:>7.2f}  {regime.split(" (")[0]}')
-                                rows.append(dict(hold=hld, tau_syn=tsyn, adapt_b=adb,
-                                                 tau_w=tw, n_input=n_in, input_scale=isc,
-                                                 inh_scale=inh, mc1=per_delay[0],
-                                                 total_mc=total_mc, horizon_ms=hms,
-                                                 sep=sep_mean, ratio=ratio, regime=regime))
+                    for adb2 in adapt_b2s:
+                        params['adapt_b2'] = adb2   # second, slower channel
+                        for tw2 in tau_w2s:
+                            params['tau_w2'] = tw2
+                            for n_in in n_inputs:
+                                args.n_input = n_in  # make_drive + pick_readout
+                                readout_idx = pick_readout(params, args)
+                                for isc in input_scales:
+                                    args.input_scale = isc
+                                    for hld in holds:
+                                        args.hold = hld  # ms/step = hold * dt
+                                        # scale sim steps so rstep count is constant
+                                        eff_steps = mc_rsteps * hld
+                                        eff_sep = sep_rsteps * hld
+                                        s_steps, s_md = args.steps, args.max_delay
+                                        args.steps, args.max_delay = (
+                                            eff_steps, args.sweep_max_delay)
+                                        per_delay, total_mc = memory_capacity(
+                                            params, args, readout_idx)
+                                        args.steps, args.max_delay = s_steps, s_md
+                                        hk, hms = memory_horizon(per_delay, args)
+                                        rk, rms = memory_reach(per_delay, args)
+                                        # light separation + divergence
+                                        s_ss, s_ns = args.sep_steps, args.sep_streams
+                                        args.sep_steps, args.sep_streams = (
+                                            eff_sep, args.sweep_streams)
+                                        sep_mean, sep_std = separation(
+                                            params, args, readout_idx)
+                                        dist = divergence(params, args, readout_idx)
+                                        args.sep_steps, args.sep_streams = s_ss, s_ns
+                                        ratio, regime = classify_regime(dist)
+                                        print(f'{hld:>5} {hld * args.dt:>6.1f} '
+                                              f'{adb:>5.1f} {tw:>6.0f} {adb2:>5.1f} '
+                                              f'{tw2:>7.0f} {isc:>6.0f} {inh:>5.1f} '
+                                              f'{per_delay[0]:>6.3f} {total_mc:>6.2f} '
+                                              f'{hms:>6.0f} {rms:>6.0f} '
+                                              f'{sep_mean:>8.4f} {ratio:>7.2f}  '
+                                              f'{regime.split(" (")[0]}')
+                                        rows.append(dict(
+                                            hold=hld, tau_syn=tsyn, adapt_b=adb,
+                                            tau_w=tw, adapt_b2=adb2, tau_w2=tw2,
+                                            n_input=n_in, input_scale=isc,
+                                            inh_scale=inh, mc1=per_delay[0],
+                                            total_mc=total_mc, horizon_ms=hms,
+                                            reach_ms=rms, sep=sep_mean, ratio=ratio,
+                                            regime=regime))
 
     usable = [r for r in rows if 'CHAOTIC' not in r['regime']]
     if usable:
-        best = max(usable, key=lambda r: r['horizon_ms'])
-        print(f'\nLongest recall among non-chaotic cells: hold={best["hold"]} '
-              f'({best["hold"] * args.dt:.0f}ms/step) tau_syn={best["tau_syn"]:.0f}ms '
-              f'adapt_b={best["adapt_b"]:.1f} tau_w={best["tau_w"]:.0f}ms '
-              f'n_input={best["n_input"]} input_scale={best["input_scale"]:.0f} '
-              f'inh_scale={best["inh_scale"]:.1f}  horizon={best["horizon_ms"]:.0f}ms '
+        # rank by reach (deepest recall) since the slow channel adds far-delay memory
+        best = max(usable, key=lambda r: (r['reach_ms'], r['total_mc']))
+        print(f'\nDeepest recall among non-chaotic cells: hold={best["hold"]} '
+              f'({best["hold"] * args.dt:.0f}ms/step) '
+              f'adapt_b={best["adapt_b"]:.1f}/tau_w={best["tau_w"]:.0f} '
+              f'adapt_b2={best["adapt_b2"]:.1f}/tau_w2={best["tau_w2"]:.0f} '
+              f'input_scale={best["input_scale"]:.0f}  '
+              f'reach={best["reach_ms"]:.0f}ms horizon={best["horizon_ms"]:.0f}ms '
               f'totalMC={best["total_mc"]:.2f} ({best["regime"].split(" (")[0]})')
 
     if args.sweep_csv:
         import csv as _csv
         with open(args.sweep_csv, 'w', newline='') as f:
             w = _csv.DictWriter(f, fieldnames=['hold', 'tau_syn', 'adapt_b', 'tau_w',
-                                               'n_input', 'input_scale', 'inh_scale',
-                                               'mc1', 'total_mc', 'horizon_ms', 'sep',
-                                               'ratio', 'regime'])
+                                               'adapt_b2', 'tau_w2', 'n_input',
+                                               'input_scale', 'inh_scale', 'mc1',
+                                               'total_mc', 'horizon_ms', 'reach_ms',
+                                               'sep', 'ratio', 'regime'])
             w.writeheader()
             w.writerows(rows)
         print(f'CSV saved to {args.sweep_csv}')
 
-    # plot recall horizon + total MC vs the primary swept lever. Preference order:
-    # adaptation (the real long-memory channel) > tau_w > tau_syn > input-scale.
-    if len(holds) > 1:
+    # plot vs the primary swept lever. Preference: slow channel (adapt_b2 > tau_w2)
+    # is the lever past the ceiling, then fast adaptation, tau_w, hold, tau_syn, input.
+    if len(adapt_b2s) > 1:
+        xkey, xlabel = 'adapt_b2', 'slow-channel increment b2'
+    elif len(tau_w2s) > 1:
+        xkey, xlabel = 'tau_w2', 'slow-channel tau_w2 (ms)'
+    elif len(holds) > 1:
         xkey, xlabel = 'hold', 'hold (sim steps/reservoir-step)'
     elif len(adapt_bs) > 1:
         xkey, xlabel = 'adapt_b', 'adaptation increment b'
@@ -499,7 +578,8 @@ def run_sweep(args):
     else:
         xkey, xlabel = 'input_scale', 'input-scale'
     group_keys = [k for k in ('inh_scale', 'n_input', 'tau_syn', 'adapt_b', 'tau_w',
-                              'hold', 'input_scale') if k != xkey]
+                              'adapt_b2', 'tau_w2', 'hold', 'input_scale')
+                  if k != xkey]
     fig, ax = plt.subplots(1, 2, figsize=(11, 4))
     seen = set()
     for r in rows:
@@ -512,19 +592,21 @@ def run_sweep(args):
                        key=lambda c: c[xkey])
         lab = ', '.join(f'{k.split("_")[0]}={v:g}' for k, v in zip(group_keys, combo))
         xs = [c[xkey] for c in cells]
-        ax[0].plot(xs, [c['horizon_ms'] for c in cells], 'o-', label=lab)
+        ax[0].plot(xs, [c['reach_ms'] for c in cells], 'o-', label=lab)
+        ax[0].plot(xs, [c['horizon_ms'] for c in cells], 'o--', alpha=0.4)
         ax[1].plot(xs, [c['total_mc'] for c in cells], 'o-', label=lab)
-    ax[0].set_xlabel(xlabel); ax[0].set_ylabel('recall horizon (ms)')
-    ax[0].set_title('Memory horizon'); ax[0].legend(fontsize=6)
+    ax[0].set_xlabel(xlabel); ax[0].set_ylabel('recall depth (ms)')
+    ax[0].set_title('Memory reach (solid) & contiguous horizon (dashed)')
+    ax[0].legend(fontsize=6)
     ax[1].set_xlabel(xlabel); ax[1].set_ylabel('total memory capacity')
     ax[1].set_title('Total MC'); ax[1].legend(fontsize=6)
     fig.suptitle(f'{args.weights}  memory sweep')
     fig.tight_layout(); fig.savefig(args.plot, dpi=120)
     print(f'\nPlot saved to {args.plot}')
-    print('\nReading it: turning on adaptation (adapt_b > 0) with tau_w ~100-300 ms')
-    print('should push the recall horizon up WITHOUT collapsing total MC the way')
-    print('raising tau_syn did. Take the longest horizon whose regime is still FADING')
-    print('MEMORY or CRITICAL-ish (not CHAOTIC); those adapt_b/tau_w are your settings.')
+    print('\nReading it: the slow second channel (adapt_b2 with tau_w2 ~1-2 s) should')
+    print('push REACH (deepest recall, solid) and total MC past the ~30 ms single-')
+    print('channel ceiling. The contiguous horizon (dashed) may lag if memory dips')
+    print('then recovers. Keep cells whose regime stays FADING / CRITICAL (not CHAOTIC).')
 
 
 def main():
