@@ -57,7 +57,7 @@ python train_memory_rstdp.py \
     --target-delay 2 \
     --adapt-b 4 \
     --tau-w 400 \
-    --tau-syn 20 \
+    --tau-syn 5 \
     --hold 150 \
     --input-scale 8 \
     --n-readout 600 \
@@ -73,7 +73,7 @@ fi
 echo "[seed $SEED] benchmarking -> $CSV"
 python reservoir_capacity.py \
     --weights "$WEIGHTS" \
-    --tau-syn 20 \
+    --tau-syn 5 \
     --hold 150 \
     --tau-state 20 \
     --n-state 600 \

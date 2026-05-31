@@ -180,12 +180,12 @@ def calibrate_drive(N, n_exc, W, tau_m, tau_syn, V_th, I_base_template,
 # ---------------------------------------------------------------------------
 
 def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
-        exc_frac=0.8, connectivity=0.1,
-        w_scale=None, w_total=0.042,
-        I_mean=2.0, I_spread=0.1, sigma=5.0, R=10.0,
-        g_inh=5.0, w_max_mult=4.0,
+        exc_frac=0.8, connectivity=0.05,
+        w_scale=0.005, w_total=0.042,
+        I_mean=2.0, I_spread=0.1, sigma=0.5, R=10.0,
+        g_inh=1.0, w_max_mult=4.0,
         tau_m_min=20.0, tau_m_max=200.0,
-        tau_syn=20.0,
+        tau_syn=5.0,
         tau_stdp=20.0,
         tau_elig=500.0,
         adapt_b=4.0,
@@ -448,8 +448,12 @@ def main():
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--N', type=int, default=500)
     p.add_argument('--exc-frac', type=float, default=0.8)
-    p.add_argument('--connectivity', type=float, default=0.1)
-    p.add_argument('--w-scale', type=float, default=None)
+    p.add_argument('--connectivity', type=float, default=0.05,
+                   help='matches random_neurons_fixed.py (the proven AI-regime '
+                        'recipe at N=2000). Higher values run away at scale.')
+    p.add_argument('--w-scale', type=float, default=0.005,
+                   help='fixed peak recurrent weight (proven recipe). Pass None '
+                        'to instead derive it from --w-total / sqrt(connectivity*N).')
     p.add_argument('--w-total', type=float, default=0.042)
     p.add_argument('--w-max-mult', type=float, default=4.0)
     p.add_argument('--warmup', type=int, default=5000,
@@ -463,14 +467,18 @@ def main():
     p.add_argument('--I-mean', type=float, default=2.0,
                    help='initial guess for mean drive (auto-calibrated)')
     p.add_argument('--I-spread', type=float, default=0.1)
-    p.add_argument('--sigma', type=float, default=5.0,
-                   help='white-noise fluctuation (higher than random_neurons_fixed '
-                        'to compensate for slower tau_syn=20ms)')
+    p.add_argument('--sigma', type=float, default=0.5,
+                   help='white-noise drive fluctuation. Kept small to match the '
+                        'proven recipe; large values push the rate up.')
     p.add_argument('--R', type=float, default=10.0)
-    p.add_argument('--g-inh', type=float, default=5.0)
+    p.add_argument('--g-inh', type=float, default=1.0,
+                   help='inhibitory gain (proven recipe = 1.0). Raising it does '
+                        'NOT calm runaway here; the synapse time constant does.')
     p.add_argument('--tau-m-min', type=float, default=20.0)
     p.add_argument('--tau-m-max', type=float, default=200.0)
-    p.add_argument('--tau-syn', type=float, default=20.0)
+    p.add_argument('--tau-syn', type=float, default=5.0,
+                   help='synaptic time constant (ms). MUST stay ~5; at 20ms the '
+                        'conductances pile up and the N=2000 network saturates.')
     p.add_argument('--tau-stdp', type=float, default=20.0)
     p.add_argument('--tau-elig', type=float, default=500.0,
                    help='eligibility trace time constant (ms). Must be >= '
