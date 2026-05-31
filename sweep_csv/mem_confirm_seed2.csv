@@ -1,0 +1,2 @@
+tau_syn,adapt_b,tau_w,n_input,input_scale,inh_scale,mc1,total_mc,horizon_ms,sep,ratio,regime
+5.0,4.0,400.0,100,8.0,1.0,0.17297087558501217,0.5167201153107484,30.0,0.08032593787084204,0.302970475152978,CRITICAL-ish (perturbation persists)

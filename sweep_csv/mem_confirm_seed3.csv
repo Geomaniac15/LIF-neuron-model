@@ -1,0 +1,2 @@
+tau_syn,adapt_b,tau_w,n_input,input_scale,inh_scale,mc1,total_mc,horizon_ms,sep,ratio,regime
+5.0,4.0,400.0,100,8.0,1.0,0.2095903772169538,0.5710129200046107,30.0,0.06247958235508049,0.2647947132515581,"FADING MEMORY (ordered, usable)"
