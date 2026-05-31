@@ -135,6 +135,13 @@ def parse_args():
     p.add_argument('--sweep-tau-ws', default='',
                    help='optional comma-separated grid of adaptation time constants (ms) '
                         'for --sweep (e.g. "100,200,400"). Empty = just use --tau-w.')
+    p.add_argument('--sweep-holds', default='',
+                   help='optional comma-separated grid of hold values (sim steps per '
+                        'reservoir-step) for --sweep (e.g. "150,250,400"). Bigger hold '
+                        '= slower reservoir step = each remembered input spans more ms, '
+                        'the lever for a longer horizon in ms (at coarser resolution). '
+                        'Reservoir-step COUNT is held constant across holds for a fair '
+                        'MC comparison; only ms-per-step changes. Empty = use --hold.')
     p.add_argument('--sweep-max-delay', type=int, default=12,
                    help='largest delay k probed for memory per sweep cell. Raise it '
                         'when chasing long memory so the horizon is not truncated.')
@@ -393,15 +400,21 @@ def run_sweep(args):
                 or [args.adapt_b])
     tau_ws = ([float(x) for x in args.sweep_tau_ws.split(',') if x.strip()]
               or [args.tau_w])
+    holds = ([int(x) for x in args.sweep_holds.split(',') if x.strip()]
+             or [args.hold])
+    # Hold the reservoir-step COUNT constant across hold values so MC estimates are
+    # comparable; only ms-per-step changes. Budgets are derived from the first hold.
+    mc_rsteps = max(1, args.sweep_steps // holds[0])
+    sep_rsteps = max(1, args.sweep_sep_steps // holds[0])
     n_cells = (len(input_scales) * len(inh_scales) * len(n_inputs) * len(tau_syns)
-               * len(adapt_bs) * len(tau_ws))
+               * len(adapt_bs) * len(tau_ws) * len(holds))
     print(f'Sweeping input_scale={input_scales} x inh_scale={inh_scales} '
           f'x n_input={n_inputs} x tau_syn={tau_syns} x adapt_b={adapt_bs} '
-          f'x tau_w={tau_ws}  ({n_cells} cells)')
-    print(f'weights = {args.weights}\n')
-    header = (f'{"tau_s":>6} {"adb":>5} {"tau_w":>6} {"n_in":>5} {"input":>6} '
-              f'{"inh":>5} {"MC_1":>6} {"totMC":>6} {"horiz_ms":>8} {"separ":>8} '
-              f'{"end/pk":>7}  regime')
+          f'x tau_w={tau_ws} x hold={holds}  ({n_cells} cells)')
+    print(f'weights = {args.weights}  ({mc_rsteps} reservoir-steps/cell)\n')
+    header = (f'{"hold":>5} {"ms/st":>6} {"tau_s":>6} {"adb":>5} {"tau_w":>6} '
+              f'{"n_in":>5} {"input":>6} {"inh":>5} {"MC_1":>6} {"totMC":>6} '
+              f'{"horiz_ms":>8} {"separ":>8} {"end/pk":>7}  regime')
     print(header)
     print('-' * (len(header) + 10))
 
@@ -420,36 +433,43 @@ def run_sweep(args):
                         readout_idx = pick_readout(params, args)
                         for isc in input_scales:
                             args.input_scale = isc
-                            # MC up to sweep_max_delay so long memory isn't truncated
-                            s_steps, s_md = args.steps, args.max_delay
-                            args.steps, args.max_delay = (args.sweep_steps,
-                                                          args.sweep_max_delay)
-                            per_delay, total_mc = memory_capacity(params, args,
-                                                                  readout_idx)
-                            args.steps, args.max_delay = s_steps, s_md
-                            hk, hms = memory_horizon(per_delay, args)
-                            # light separation + divergence
-                            s_ss, s_ns = args.sep_steps, args.sep_streams
-                            args.sep_steps, args.sep_streams = (args.sweep_sep_steps,
-                                                                args.sweep_streams)
-                            sep_mean, sep_std = separation(params, args, readout_idx)
-                            dist = divergence(params, args, readout_idx)
-                            args.sep_steps, args.sep_streams = s_ss, s_ns
-                            ratio, regime = classify_regime(dist)
-                            print(f'{tsyn:>6.0f} {adb:>5.1f} {tw:>6.0f} {n_in:>5} '
-                                  f'{isc:>6.0f} {inh:>5.1f} {per_delay[0]:>6.3f} '
-                                  f'{total_mc:>6.2f} {hms:>8.0f} {sep_mean:>8.4f} '
-                                  f'{ratio:>7.2f}  {regime.split(" (")[0]}')
-                            rows.append(dict(tau_syn=tsyn, adapt_b=adb, tau_w=tw,
-                                             n_input=n_in, input_scale=isc,
-                                             inh_scale=inh, mc1=per_delay[0],
-                                             total_mc=total_mc, horizon_ms=hms,
-                                             sep=sep_mean, ratio=ratio, regime=regime))
+                            for hld in holds:
+                                args.hold = hld  # ms/reservoir-step = hold * dt
+                                # scale total sim steps so rstep count stays constant
+                                eff_steps = mc_rsteps * hld
+                                eff_sep = sep_rsteps * hld
+                                # MC up to sweep_max_delay so long memory isn't truncated
+                                s_steps, s_md = args.steps, args.max_delay
+                                args.steps, args.max_delay = (eff_steps,
+                                                              args.sweep_max_delay)
+                                per_delay, total_mc = memory_capacity(params, args,
+                                                                      readout_idx)
+                                args.steps, args.max_delay = s_steps, s_md
+                                hk, hms = memory_horizon(per_delay, args)
+                                # light separation + divergence
+                                s_ss, s_ns = args.sep_steps, args.sep_streams
+                                args.sep_steps, args.sep_streams = (eff_sep,
+                                                                    args.sweep_streams)
+                                sep_mean, sep_std = separation(params, args, readout_idx)
+                                dist = divergence(params, args, readout_idx)
+                                args.sep_steps, args.sep_streams = s_ss, s_ns
+                                ratio, regime = classify_regime(dist)
+                                print(f'{hld:>5} {hld * args.dt:>6.1f} {tsyn:>6.0f} '
+                                      f'{adb:>5.1f} {tw:>6.0f} {n_in:>5} {isc:>6.0f} '
+                                      f'{inh:>5.1f} {per_delay[0]:>6.3f} '
+                                      f'{total_mc:>6.2f} {hms:>8.0f} {sep_mean:>8.4f} '
+                                      f'{ratio:>7.2f}  {regime.split(" (")[0]}')
+                                rows.append(dict(hold=hld, tau_syn=tsyn, adapt_b=adb,
+                                                 tau_w=tw, n_input=n_in, input_scale=isc,
+                                                 inh_scale=inh, mc1=per_delay[0],
+                                                 total_mc=total_mc, horizon_ms=hms,
+                                                 sep=sep_mean, ratio=ratio, regime=regime))
 
     usable = [r for r in rows if 'CHAOTIC' not in r['regime']]
     if usable:
         best = max(usable, key=lambda r: r['horizon_ms'])
-        print(f'\nLongest recall among non-chaotic cells: tau_syn={best["tau_syn"]:.0f}ms '
+        print(f'\nLongest recall among non-chaotic cells: hold={best["hold"]} '
+              f'({best["hold"] * args.dt:.0f}ms/step) tau_syn={best["tau_syn"]:.0f}ms '
               f'adapt_b={best["adapt_b"]:.1f} tau_w={best["tau_w"]:.0f}ms '
               f'n_input={best["n_input"]} input_scale={best["input_scale"]:.0f} '
               f'inh_scale={best["inh_scale"]:.1f}  horizon={best["horizon_ms"]:.0f}ms '
@@ -458,17 +478,19 @@ def run_sweep(args):
     if args.sweep_csv:
         import csv as _csv
         with open(args.sweep_csv, 'w', newline='') as f:
-            w = _csv.DictWriter(f, fieldnames=['tau_syn', 'adapt_b', 'tau_w', 'n_input',
-                                               'input_scale', 'inh_scale', 'mc1',
-                                               'total_mc', 'horizon_ms', 'sep', 'ratio',
-                                               'regime'])
+            w = _csv.DictWriter(f, fieldnames=['hold', 'tau_syn', 'adapt_b', 'tau_w',
+                                               'n_input', 'input_scale', 'inh_scale',
+                                               'mc1', 'total_mc', 'horizon_ms', 'sep',
+                                               'ratio', 'regime'])
             w.writeheader()
             w.writerows(rows)
         print(f'CSV saved to {args.sweep_csv}')
 
     # plot recall horizon + total MC vs the primary swept lever. Preference order:
     # adaptation (the real long-memory channel) > tau_w > tau_syn > input-scale.
-    if len(adapt_bs) > 1:
+    if len(holds) > 1:
+        xkey, xlabel = 'hold', 'hold (sim steps/reservoir-step)'
+    elif len(adapt_bs) > 1:
         xkey, xlabel = 'adapt_b', 'adaptation increment b'
     elif len(tau_ws) > 1:
         xkey, xlabel = 'tau_w', 'tau_w (ms)'
@@ -477,7 +499,7 @@ def run_sweep(args):
     else:
         xkey, xlabel = 'input_scale', 'input-scale'
     group_keys = [k for k in ('inh_scale', 'n_input', 'tau_syn', 'adapt_b', 'tau_w',
-                              'input_scale') if k != xkey]
+                              'hold', 'input_scale') if k != xkey]
     fig, ax = plt.subplots(1, 2, figsize=(11, 4))
     seen = set()
     for r in rows:
