@@ -1,0 +1,2 @@
+/var/spool/slurmd/job30000/slurm_script: line 38: module: command not found
+[2026-05-31T19:45:37.292] error: *** JOB 30000 ON hex-p3-c3 CANCELLED AT 2026-05-31T19:45:37 DUE to SIGNAL Terminated ***
