@@ -191,7 +191,7 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
         adapt_b=4.0,
         tau_w=400.0,
         eta_rstdp=5e-5,
-        rls_alpha=1.0,
+        rls_alpha=100.0,
         target_delay=33,
         hold=150,
         n_input=100,
@@ -280,8 +280,10 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
     x_pre       = np.zeros(N)
     x_post      = np.zeros(N)
 
-    # Eligibility decays every sim step; modulated by d(t) every reservoir step.
-    elig_decay  = np.exp(-dt / tau_elig)
+    # Eligibility decays once per RESERVOIR step (not per sim step): tau_elig is
+    # 500 ms, so 15 ms granularity is negligible error, and it turns 1.5M dense
+    # (N,N) matrix multiplies into ~n_rsteps of them (~150x fewer).
+    elig_decay_rstep = np.exp(-(dt * hold) / tau_elig)
     # Store as (N, N) dense but accumulate only over masked (connected) synapses.
     # For N=200 this is 40k floats = fine. For N=2000 it's 4M floats = 32 MB, fine.
     e_elig      = np.zeros((N, N))
@@ -332,6 +334,8 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
         spike_trace = spike_trace * trace_decay + fired.astype(float)
 
     W_initial = W.copy()   # snapshot after warmup settling, before plasticity
+    print(f'[warmup] done; entering training (first report at rstep '
+          f'{report_every})', flush=True)
 
     # -----------------------------------------------------------------------
     # Main training loop  (iterate over reservoir steps, not sim steps)
@@ -379,20 +383,22 @@ def run(N=500, warmup_steps=5000, n_rsteps=2000, dt=0.1, seed=0,
             x_pre  = x_pre  * stdp_decay + fired.astype(float)
             x_post = x_post * stdp_decay + fired.astype(float)
 
-            # -- eligibility trace: vectorised rank-1 updates --
-            # Decay first.
-            e_elig *= elig_decay
-            if fired.any():
-                f = fired.astype(np.float64)
-                # LTP: for each postsynaptic neuron j that fired,
+            # -- eligibility trace: SPARSE rank-1 updates --
+            # Only the handful of neurons that fired this sim step touch the
+            # matrix, so cost is O(n_fired * N) not O(N^2). Mathematically
+            # identical to the dense outer-product form; the only change is that
+            # decay is folded out to once per reservoir step (below).
+            fired_idx = np.where(fired)[0]
+            if fired_idx.size:
+                # LTP: each postsynaptic neuron j that fired gets column
                 #   e_elig[:, j] += x_pre * mask[:, j]
-                # Vectorised: outer(x_pre, f) gives an (N,N) matrix where column j
-                # is x_pre when j fired, 0 otherwise. Mask to connected synapses.
-                e_elig += np.outer(x_pre, f) * mask_f
-                # LTD: for each presynaptic neuron i that fired,
+                e_elig[:, fired_idx] += x_pre[:, None] * mask_f[:, fired_idx]
+                # LTD: each presynaptic neuron i that fired gets row
                 #   e_elig[i, :] -= x_post * mask[i, :]
-                # Vectorised: outer(f, x_post) gives row i = x_post when i fired.
-                e_elig -= np.outer(f, x_post) * mask_f
+                e_elig[fired_idx, :] -= x_post[None, :] * mask_f[fired_idx, :]
+
+        # -- eligibility decays once per reservoir step (see note above) --
+        e_elig *= elig_decay_rstep
 
         # -- readout prediction & R-STDP update (once per reservoir step) --
         if rs >= target_delay + 1:
@@ -490,9 +496,10 @@ def main():
                    help='adaptation time constant (ms). 400 was the proven '
                         'memory sweet spot in reservoir_capacity.py.')
     p.add_argument('--eta-rstdp', type=float, default=5e-5)
-    p.add_argument('--rls-alpha', type=float, default=1.0,
-                   help='RLS readout regulariser (P0 = I/alpha). Smaller = faster '
-                        'but noisier adaptation of the readout/teaching signal.')
+    p.add_argument('--rls-alpha', type=float, default=100.0,
+                   help='RLS readout regulariser (P0 = I/alpha). LARGER = more '
+                        'regularised/stable. Needs to be ~100 here, otherwise the '
+                        'readout overfits noise and the error diverges upward.')
     p.add_argument('--target-delay', type=int, default=33,
                    help='delay in reservoir-steps. 33 x 150 x 0.1ms = 495ms. '
                         'Use --target-delay 5 for local sanity checks.')
