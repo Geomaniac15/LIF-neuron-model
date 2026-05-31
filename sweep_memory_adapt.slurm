@@ -31,9 +31,9 @@
 # WEIGHTS_DIR defaults to results_fixed/ here; override at submit time:
 #   WEIGHTS_DIR=/abs/path sbatch sweep_memory_adapt.slurm
 
-#SBATCH -p serial
+#SBATCH --partition=cpu-6h
 #SBATCH -J lif_mem_adapt
-#SBATCH -t 12:00:00
+#SBATCH -t 5:00:00
 #SBATCH --mem=8G
 #SBATCH --array=0-9
 #SBATCH -o logs/%x_%A_%a.out

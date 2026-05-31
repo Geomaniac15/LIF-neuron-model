@@ -1,0 +1,19 @@
+/var/spool/slurmd/job29949/slurm_script: line 43: module: command not found
+/mnt/nfs/homes/vealg/LIF-neuron-model/reservoir_capacity.py:239: RuntimeWarning: overflow encountered in multiply
+  dV = (1.0 / tau_m) * (-(V - V_rest) + R * (current_I + I_syn) - w_adapt)
+/mnt/nfs/homes/vealg/LIF-neuron-model/reservoir_capacity.py:239: RuntimeWarning: invalid value encountered in add
+  dV = (1.0 / tau_m) * (-(V - V_rest) + R * (current_I + I_syn) - w_adapt)
+/mnt/nfs/homes/vealg/LIF-neuron-model/reservoir_capacity.py:238: RuntimeWarning: invalid value encountered in subtract
+  I_syn = -g_exc * (V - E_exc) - g_inh * (V - E_inh)
+/mnt/nfs/homes/vealg/LIF-neuron-model/reservoir_capacity.py:239: RuntimeWarning: overflow encountered in multiply
+  dV = (1.0 / tau_m) * (-(V - V_rest) + R * (current_I + I_syn) - w_adapt)
+/mnt/nfs/homes/vealg/LIF-neuron-model/reservoir_capacity.py:239: RuntimeWarning: invalid value encountered in add
+  dV = (1.0 / tau_m) * (-(V - V_rest) + R * (current_I + I_syn) - w_adapt)
+/mnt/nfs/homes/vealg/LIF-neuron-model/reservoir_capacity.py:238: RuntimeWarning: invalid value encountered in subtract
+  I_syn = -g_exc * (V - E_exc) - g_inh * (V - E_inh)
+/mnt/nfs/homes/vealg/LIF-neuron-model/reservoir_capacity.py:239: RuntimeWarning: overflow encountered in multiply
+  dV = (1.0 / tau_m) * (-(V - V_rest) + R * (current_I + I_syn) - w_adapt)
+/mnt/nfs/homes/vealg/LIF-neuron-model/reservoir_capacity.py:239: RuntimeWarning: invalid value encountered in add
+  dV = (1.0 / tau_m) * (-(V - V_rest) + R * (current_I + I_syn) - w_adapt)
+/mnt/nfs/homes/vealg/LIF-neuron-model/reservoir_capacity.py:238: RuntimeWarning: invalid value encountered in subtract
+  I_syn = -g_exc * (V - E_exc) - g_inh * (V - E_inh)

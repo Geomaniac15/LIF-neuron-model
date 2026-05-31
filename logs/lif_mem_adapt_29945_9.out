@@ -1,0 +1,33 @@
+[seed 9] host=hex-p3-c4 started=Sun 31 May 15:03:18 BST 2026
+[seed 9] weights=results_fixed/run_N2000_seed9.npz -> sweep_csv/mem_adapt_seed9.csv
+Sweeping input_scale=[8.0] x inh_scale=[1.0] x n_input=[100] x tau_syn=[5.0] x adapt_b=[0.0, 2.0, 4.0, 6.0, 8.0] x tau_w=[100.0, 200.0, 400.0]  (15 cells)
+weights = results_fixed/run_N2000_seed9.npz
+
+ tau_s   adb  tau_w  n_in  input   inh   MC_1  totMC horiz_ms    separ  end/pk  regime
+------------------------------------------------------------------------------------------------
+     5   0.0    100   100      8   1.0  0.162   0.46       15   0.1298    0.92  CRITICAL-ish
+     5   0.0    200   100      8   1.0  0.162   0.46       15   0.1298    0.92  CRITICAL-ish
+     5   0.0    400   100      8   1.0  0.162   0.46       15   0.1298    0.92  CRITICAL-ish
+     5   2.0    100   100      8   1.0  0.184   0.59       15   0.1464    0.68  CRITICAL-ish
+     5   2.0    200   100      8   1.0  0.036   0.40        0   0.1637    0.28  FADING MEMORY
+     5   2.0    400   100      8   1.0  0.251   0.84       45   0.1061    0.22  FADING MEMORY
+     5   4.0    100   100      8   1.0  0.160   0.78       15   0.1771    0.22  FADING MEMORY
+     5   4.0    200   100      8   1.0  0.299   1.02       30   0.0899    0.16  FADING MEMORY
+     5   4.0    400   100      8   1.0  0.227   0.82       30   0.0796    0.15  FADING MEMORY
+     5   6.0    100   100      8   1.0  0.431   1.12       30   0.0907    0.15  FADING MEMORY
+     5   6.0    200   100      8   1.0  0.130   0.87       30   0.0891    0.23  FADING MEMORY
+     5   6.0    400   100      8   1.0  0.182   0.83       30   0.0925    0.22  FADING MEMORY
+     5   8.0    100   100      8   1.0  0.297   1.08       45   0.0850    0.17  FADING MEMORY
+     5   8.0    200   100      8   1.0  0.342   0.85       30   0.0861    0.26  FADING MEMORY
+     5   8.0    400   100      8   1.0  0.259   0.81       15   0.0983    0.20  FADING MEMORY
+
+Longest recall among non-chaotic cells: tau_syn=5ms adapt_b=2.0 tau_w=400ms n_input=100 input_scale=8 inh_scale=1.0  horizon=45ms totalMC=0.84 (FADING MEMORY)
+CSV saved to sweep_csv/mem_adapt_seed9.csv
+
+Plot saved to plots/mem_adapt_seed9.png
+
+Reading it: turning on adaptation (adapt_b > 0) with tau_w ~100-300 ms
+should push the recall horizon up WITHOUT collapsing total MC the way
+raising tau_syn did. Take the longest horizon whose regime is still FADING
+MEMORY or CRITICAL-ish (not CHAOTIC); those adapt_b/tau_w are your settings.
+[seed 9] finished=Sun 31 May 15:05:19 BST 2026
