@@ -1,0 +1,21 @@
+[seed 5] host=hex-p3-c2 started=Sun 31 May 15:32:11 BST 2026
+[seed 5] weights=results_fixed/run_N2000_seed5.npz -> sweep_csv/mem_hold_seed5.csv  (adapt_b=4 tau_w=400, hold sweep)
+Sweeping input_scale=[8.0] x inh_scale=[1.0] x n_input=[100] x tau_syn=[5.0] x adapt_b=[4.0] x tau_w=[400.0] x hold=[150, 250, 400]  (3 cells)
+weights = results_fixed/run_N2000_seed5.npz  (160 reservoir-steps/cell)
+
+ hold  ms/st  tau_s   adb  tau_w  n_in  input   inh   MC_1  totMC horiz_ms    separ  end/pk  regime
+-------------------------------------------------------------------------------------------------------------
+  150   15.0      5   4.0    400   100      8   1.0  0.291   0.91       30   0.0950    0.33  CRITICAL-ish
+  250   25.0      5   4.0    400   100      8   1.0  0.268   0.58       25   0.0601    0.48  CRITICAL-ish
+  400   40.0      5   4.0    400   100      8   1.0  0.048   0.42        0   0.0568    0.11  FADING MEMORY
+
+Longest recall among non-chaotic cells: hold=150 (15ms/step) tau_syn=5ms adapt_b=4.0 tau_w=400ms n_input=100 input_scale=8 inh_scale=1.0  horizon=30ms totalMC=0.91 (CRITICAL-ish)
+CSV saved to sweep_csv/mem_hold_seed5.csv
+
+Plot saved to plots/mem_hold_seed5.png
+
+Reading it: turning on adaptation (adapt_b > 0) with tau_w ~100-300 ms
+should push the recall horizon up WITHOUT collapsing total MC the way
+raising tau_syn did. Take the longest horizon whose regime is still FADING
+MEMORY or CRITICAL-ish (not CHAOTIC); those adapt_b/tau_w are your settings.
+[seed 5] finished=Sun 31 May 15:32:44 BST 2026
