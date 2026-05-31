@@ -1,0 +1,8 @@
+[seed 1] host=hex-p3-c2 started=Sun 31 May 20:00:47 BST 2026
+[seed 1] training -> results_mem/run_N2000_seed1.npz
+[run] N=2000 seed=1  10000 reservoir-steps (1500000 sim steps)  target_delay=2 (30ms)  tau_syn=5.0ms tau_m=[20.0,200.0]ms  eta_rstdp=5e-05 adapt_b=4.0 tau_w=400.0
+[init] N=2000 n_exc=1600 n_inh=400 w_scale=0.005000 tau_syn=5.0ms tau_m=[20.0,200.0]ms
+[calib] I_mean=4.250  mean_rate=18.6Hz (target 5.0-25.0Hz)
+[train] 10000 reservoir-steps (1500000 sim steps)  target_delay=2 (30ms)  hold=150  n_ro=600
+[train] eta_rstdp=5e-05  rls_alpha=1.0  tau_elig=500.0ms  tau_stdp=20.0ms  adapt_b=4.0 tau_w=400.0ms
+[warmup] 5000 steps...
