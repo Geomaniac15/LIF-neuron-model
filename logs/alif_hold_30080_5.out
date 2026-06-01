@@ -1,0 +1,12 @@
+[seed 5] host=hex-p3-c6 started=Mon  1 Jun 19:01:36 BST 2026
+[seed 5] python=/mnt/nfs/homes/vealg/LIF-neuron-model/.venv/bin/python
+[init] N=2000 dt=1.0ms  tau_a in [200,8000]ms  frac(tau_a>=5000ms)=0.13  recurrence=off
+[sim] 1500+400 trials simulated  (488s)
+[delay    250ms] test MSE=0.0043  R2=+0.987  (chance MSE=0.3333)
+[delay    500ms] test MSE=0.0038  R2=+0.989  (chance MSE=0.3333)
+[delay   1000ms] test MSE=0.0064  R2=+0.981  (chance MSE=0.3333)
+[delay   2000ms] test MSE=0.0139  R2=+0.958  (chance MSE=0.3333)
+[delay   3000ms] test MSE=0.0270  R2=+0.919  (chance MSE=0.3333)
+[delay   5000ms] test MSE=0.0609  R2=+0.817  (chance MSE=0.3333)
+[saved] results_alif_hold_bg10/alif_hold_N2000_seed5.npz  total 493s
+[seed 5] done=Mon  1 Jun 19:09:50 BST 2026
