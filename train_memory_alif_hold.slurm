@@ -43,7 +43,7 @@ export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
 export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
 export PYTHONUNBUFFERED=1
 
-mkdir -p logs results_alif_hold
+mkdir -p logs results_alif_hold_bg10
 SEED=$SLURM_ARRAY_TASK_ID
 
 echo "[seed $SEED] host=$(hostname) started=$(date)"
@@ -64,10 +64,10 @@ python train_memory_alif_hold.py \
     --tau-a-max     8000 \
     --beta-a        1.5  \
     --input-scale   2.0  \
-    --background    0.6  \
+    --background    1.0  \
     --background-spread 0.1 \
     --rec-gain      0.0  \
     --ridge         10.0 \
-    --outdir        results_alif_hold
+    --outdir        results_alif_hold_bg10
 
 echo "[seed $SEED] done=$(date)"
