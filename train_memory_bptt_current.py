@@ -500,6 +500,14 @@ def train(args):
     if not args.no_calibrate:
         params = calibrate_drive(W, params, args)
 
+    # online firing-rate homeostasis: calibration sets the START operating point,
+    # but as BPTT moves W the network drifts out of the useful band (saturates or
+    # goes silent). This integral controller shifts the background I_ext MEAN each
+    # window toward target_rate, preserving the per-neuron spread and running fully
+    # outside the gradient. bg_mean is clamped to the calibration search band.
+    I_ext_spread = params['I_ext'] - params['I_ext'].mean()
+    bg_mean = float(params['I_ext'].mean())
+
     W_initial = W.copy()
 
     rng = np.random.default_rng(args.seed + 3)
@@ -574,12 +582,18 @@ def train(args):
         carry = {k: v.copy() for k, v in carry_out.items()}
         rstep += this_chunk
 
+        # ---- online firing-rate homeostasis (decoupled from the gradient) ----
+        rate = tape['s'].mean() / dt * 1000.0
+        if args.homeo:
+            bg_mean += args.homeo_gain * (args.target_rate - rate)
+            bg_mean = float(np.clip(bg_mean, args.calib_lo_I, args.calib_hi_I))
+            params['I_ext'] = I_ext_spread + bg_mean
+
         if recent and rstep % report_every < chunk:
             mse = float(np.mean(recent[-50:]))
-            # mean firing rate over the last window (sanity)
-            rate = tape['s'].mean() / dt * 1000.0
             print(f'[rstep {rstep:5d}/{n_rsteps}] recall MSE={mse:.4f} '
-                  f'rate={rate:5.1f}Hz  ({time.time()-t0:.0f}s)')
+                  f'rate={rate:5.1f}Hz  I_bg={bg_mean:5.2f}  ({time.time()-t0:.0f}s)',
+                  flush=True)
 
     final_mse = float(np.mean(recent[-50:])) if recent else float('nan')
     print(f'[done] final recall MSE={final_mse:.4f} '
@@ -651,6 +665,15 @@ def parse_args():
                         'transient that otherwise overestimates the rate).')
     p.add_argument('--calib-iters', type=int, default=16,
                    help='bisection iterations for drive calibration.')
+    # online firing-rate homeostasis (secondary drive trim; off by default because
+    # a scalar background nudge cannot track bursting from recurrent feedback, the
+    # recurrent-gain constraint is the load-bearing stabiliser)
+    p.add_argument('--homeo', action='store_true',
+                   help='enable the online background-current rate controller.')
+    p.add_argument('--homeo-gain', type=float, default=0.02,
+                   help='integral gain (I_ext-mean units per Hz of rate error) for '
+                        'the online homeostasis controller. Larger tracks faster '
+                        'but can oscillate against the slow adaptation timescale.')
     p.add_argument('--background-spread', type=float, default=0.1)
     p.add_argument('--refractory', type=float, default=2.0,
                    help='refractory period (ms). Set 0 to disable.')
