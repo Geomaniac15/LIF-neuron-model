@@ -522,7 +522,8 @@ def train(args):
     # warmup (no learning) to wash out the transient
     warm_rsteps = args.washout
     print(f'[init] N={N} n_exc={n_exc} readout={len(readout_idx)} '
-          f'delay={args.target_delay} chunk={chunk} adapt_b={args.adapt_b}')
+          f'delay={args.target_delay} chunk={chunk} adapt_b={args.adapt_b}',
+          flush=True)
 
     rstep = 0
     report_every = max(1, args.report_every)
