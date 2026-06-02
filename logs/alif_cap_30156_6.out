@@ -1,0 +1,5 @@
+[seed 6] host=hex-p3-c7 started=Tue  2 Jun 16:42:50 BST 2026
+[init] N=2000 dt=1.0ms background=1.0 tau_a_max=8000ms  K sweep=[1, 2, 4, 8, 16, 32, 64, 128]
+[K=  1] mean recall R2 per delay  0.5s:+0.991  2.0s:+0.951  5.0s:+0.804   (1983s)
+[K=  2] mean recall R2 per delay  0.5s:+0.986  2.0s:+0.908  5.0s:+0.716   (3958s)
+[K=  4] mean recall R2 per delay  0.5s:+0.976  2.0s:+0.891  5.0s:+0.701   (5768s)
