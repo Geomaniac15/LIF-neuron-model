@@ -86,8 +86,11 @@ def simulate(args, net, cues, rng):
             g = g * syn_decay + s @ W
         after = t - cue_steps + 1
         if after in checkpoints:
+            # slow adaptation variable b is where multi-second memory lives; the
+            # fast trace is ~0 by these delays, so we read b only. This halves the
+            # feature dimension (N+1), keeping the per-item readouts well-posed.
             feats[checkpoints[after]] = np.concatenate(
-                [b.copy(), rtr.copy(), np.ones((B, 1))], axis=1)
+                [b.copy(), np.ones((B, 1))], axis=1)
     return feats
 
 
