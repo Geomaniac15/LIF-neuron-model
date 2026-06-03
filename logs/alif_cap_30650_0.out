@@ -1,0 +1,11 @@
+[seed 0] host=hex-p3-c8 started=Wed  3 Jun 14:12:39 BST 2026
+[init] N=2000 dt=2.0ms background=1.0 tau_a_max=8000ms  K sweep=[1, 2, 4, 8, 16, 32, 64]
+[K=  1] mean recall R2 per delay  0.5s:+0.991  2.0s:+0.963  5.0s:+0.819   (692s)
+[K=  2] mean recall R2 per delay  0.5s:+0.990  2.0s:+0.952  5.0s:+0.873   (1411s)
+[K=  4] mean recall R2 per delay  0.5s:+0.984  2.0s:+0.973  5.0s:+0.856   (2071s)
+[K=  8] mean recall R2 per delay  0.5s:+0.979  2.0s:+0.968  5.0s:+0.863   (2726s)
+[K= 16] mean recall R2 per delay  0.5s:+0.932  2.0s:+0.894  5.0s:+0.747   (3407s)
+[K= 32] mean recall R2 per delay  0.5s:+0.886  2.0s:+0.819  5.0s:+0.336   (4074s)
+[K= 64] mean recall R2 per delay  0.5s:+0.817  2.0s:+0.671  5.0s:-0.049   (4756s)
+[saved] results_alif_capacity/capacity_N2000_seed0.npz  total 4756s
+[seed 0] done=Wed  3 Jun 15:31:56 BST 2026
