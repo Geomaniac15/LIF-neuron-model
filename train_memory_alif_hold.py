@@ -121,7 +121,7 @@ def ridge_fit(X, y, lam):
     return np.linalg.solve(A, X.T @ y)
 
 
-def main():
+def parse_args(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument('--N', type=int, default=2000)
     p.add_argument('--seed', type=int, default=0)
@@ -162,9 +162,13 @@ def main():
     # readout
     p.add_argument('--ridge', type=float, default=1.0)
     p.add_argument('--outdir', type=str, default='results_alif_hold')
-    args = p.parse_args()
-
+    args = p.parse_args(argv)
     args.delay_list = [float(x) for x in args.delays.split(',')]
+    return args
+
+
+def main():
+    args = parse_args()
     rng = np.random.default_rng(args.seed)
     t0 = time.time()
 
